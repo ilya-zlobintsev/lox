@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sharplox", "Sharplox\Sharplox.csproj", "{707FFD89-1470-4EB2-8366-8D55F1F2B9A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sharplox.Tests", "Sharplox.Tests\Sharplox.Tests.csproj", "{A4B7BEB0-5D85-45A3-95E9-00A5C7D5706D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{707FFD89-1470-4EB2-8366-8D55F1F2B9A0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{707FFD89-1470-4EB2-8366-8D55F1F2B9A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{707FFD89-1470-4EB2-8366-8D55F1F2B9A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{707FFD89-1470-4EB2-8366-8D55F1F2B9A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A4B7BEB0-5D85-45A3-95E9-00A5C7D5706D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A4B7BEB0-5D85-45A3-95E9-00A5C7D5706D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A4B7BEB0-5D85-45A3-95E9-00A5C7D5706D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A4B7BEB0-5D85-45A3-95E9-00A5C7D5706D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
