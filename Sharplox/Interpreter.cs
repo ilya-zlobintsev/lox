@@ -1,22 +1,38 @@
 namespace Sharplox;
 
+// The Statement visitor always returns null, because statements don't have a return value
 public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object?>
 {
-    public void Interpret(IReadOnlyList<Statement> statements)
+    Environment _environment = new();
+
+    public object? Interpret(List<Statement> statements)
     {
+        object? output = null;
         try
         {
-            foreach (var statement in statements)
-                Execute(statement);
+            for (var i = 0; i < statements.Count; i++)
+            {
+                var statement = statements[i];
+                if ((i == statements.Count - 1) && (statement is ExpressionStatement stmt))
+                {
+                    output = Evaluate(stmt.Expression);
+                }
+                else
+                {
+                    Execute(statement);
+                }
+            }
         }
         catch (RuntimeError error)
         {
             Lox.RuntimeError(error);
         }
+
+        return output;
     }
-    
+
     // Expressions
-    public object? VisitUnaryExpr(UnaryExpr expr)
+    public object? VisitUnaryExpression(UnaryExpression expr)
     {
         var right = Evaluate(expr.Right);
         if (right is null)
@@ -30,7 +46,7 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         };
     }
 
-    public object? VisitBinaryExpr(BinaryExpr expr)
+    public object? VisitBinaryExpression(BinaryExpression expr)
     {
         var left = Evaluate(expr.Left);
         var right = Evaluate(expr.Right);
@@ -78,9 +94,17 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         };
     }
 
-    public object? VisitGroupingExpr(GroupingExpr expr) => Evaluate(expr.Expression);
-    public object? VisitVariableExpr(VariableExpr expr) => throw new NotImplementedException();
-    public object? VisitLiteralExpr(LiteralExpr expr) => expr.Value;
+    public object? VisitGroupingExpression(GroupingExpression expr) => Evaluate(expr.Expression);
+    public object? VisitVariableExpression(VariableExpression expr) => _environment.Get(expr.Name);
+
+    public object? VisitAssignmentExpression(AssignmentExpression expr)
+    {
+        var value = Evaluate(expr.Value);
+        _environment.Assign(expr.Name, value);
+        return value;
+    }
+
+    public object? VisitLiteralExpression(LiteralExpression expr) => expr.Value;
 
     // Statements
     public object? VisitExpressionStatement(ExpressionStatement stmt)
@@ -96,11 +120,41 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         return null;
     }
 
-    public object? VisitDeclarationStatement(DeclarationStatement stmt) => throw new NotImplementedException();
+    public object? VisitVariableStatement(VariableStatement stmt)
+    {
+        object? value = null;
+        if (stmt.Initializer is not null)
+            value = Evaluate(stmt.Initializer);
+
+        _environment.Define(stmt.Name.Lexeme, value);
+        return null;
+    }
+
+    public object? VisitBlockStatement(BlockStatement stmt)
+    {
+        ExecuteBlock(stmt.Statements, new(_environment));
+        return null;
+    }
 
     // Utilities
-    object? Evaluate(Expr expr) => expr.Accept(this);
-    object? Execute(Statement stmt) => stmt.Accept(this);
+    object? Evaluate(Expression expr) => expr.Accept(this);
+    void Execute(Statement stmt) => stmt.Accept(this);
+
+    void ExecuteBlock(List<Statement> statements, Environment currentEnvironment)
+    {
+        var previousEnvironment = _environment;
+        try
+        {
+            _environment = currentEnvironment;
+
+            foreach (var statement in statements)
+                Execute(statement);
+        }
+        finally
+        {
+            _environment = previousEnvironment;
+        }
+    }
 
     bool IsTruthy(object data) => data switch
     {
@@ -115,11 +169,12 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
     {
         if (left is not double)
             throw new RuntimeError(op, "Left operand is not a number");
+
         if (right is not double)
             throw new RuntimeError(op, "Right operand is not a number");
     }
 
-    string Stringify(object? value) => value switch
+    public static string Stringify(object? value) => value switch
     {
         null => "nil",
         double number => number.ToString("G29"),

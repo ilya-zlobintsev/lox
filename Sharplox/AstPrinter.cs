@@ -5,9 +5,9 @@ namespace Sharplox;
 
 public class AstPrinter : IExpressionVisitor<string>
 {
-    public static string Print(Expr expr) => expr.Accept(new AstPrinter());
+    public static string Print(Expression expression) => expression.Accept(new AstPrinter());
 
-    string PrintExpression(string name, params Expr[] expressions)
+    string PrintExpression(string name, params Expression[] expressions)
     {
         StringBuilder builder = new();
 
@@ -20,9 +20,11 @@ public class AstPrinter : IExpressionVisitor<string>
         return builder.ToString();
     }
 
-    public string VisitUnaryExpr(UnaryExpr expr) => PrintExpression(expr.Operator.Lexeme, expr.Right);
-    public string VisitBinaryExpr(BinaryExpr expr) => PrintExpression(expr.Operator.Lexeme, expr.Left, expr.Right);
-    public string VisitGroupingExpr(GroupingExpr expr) => PrintExpression("group", expr.Expression);
-    public string VisitVariableExpr(VariableExpr expr) => PrintExpression(expr.Name.Lexeme);
-    public string VisitLiteralExpr(LiteralExpr expr) => expr.Value?.ToString() ?? "nil";
+    public string VisitUnaryExpression(UnaryExpression expr) => PrintExpression(expr.Operator.Lexeme, expr.Right);
+    public string VisitBinaryExpression(BinaryExpression expr) => PrintExpression(expr.Operator.Lexeme, expr.Left, expr.Right);
+    public string VisitGroupingExpression(GroupingExpression expr) => PrintExpression("group", expr.Expression);
+    public string VisitVariableExpression(VariableExpression expr) => PrintExpression(expr.Name.Lexeme);
+    public string VisitAssignmentExpression(AssignmentExpression expr) => throw new NotImplementedException();
+
+    public string VisitLiteralExpression(LiteralExpression expr) => expr.Value?.ToString() ?? "nil";
 }

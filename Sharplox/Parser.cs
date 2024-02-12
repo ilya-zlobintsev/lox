@@ -1,6 +1,6 @@
 namespace Sharplox;
 
-public class Parser(IReadOnlyList<Token> tokens)
+public struct Parser(IReadOnlyList<Token> tokens)
 {
     int _current;
 
@@ -8,16 +8,45 @@ public class Parser(IReadOnlyList<Token> tokens)
     {
         List<Statement> statements = new();
         while (!IsAtEnd())
-            statements.Add(Statement());
+            if (Declaration() is { } statement)
+                statements.Add(statement);
 
         return statements;
+    }
+
+    Statement? Declaration()
+    {
+        try
+        {
+            if (CurrentMatches(TokenType.Var)) return VariableDeclaration();
+            return Statement();
+        }
+        catch (ParseError)
+        {
+            PanicAndSynchronize();
+            return null;
+        }
+    }
+
+    Statement VariableDeclaration()
+    {
+        var name = Consume(TokenType.Identifier, "Expected a valid variable name");
+        Expression? initializer = null;
+        if (CurrentMatches(TokenType.Equal))
+            initializer = Expression();
+
+        Consume(TokenType.Semicolon, "Expected a ';' after a variable declaration");
+        return new VariableStatement(name, initializer);
     }
 
     Statement Statement()
     {
         if (CurrentMatches(TokenType.Print)) return PrintStatement();
+        if (CurrentMatches(TokenType.LeftBrace)) return BlockStatement();
         return ExpressionStatement();
     }
+
+    Statement BlockStatement() => new BlockStatement(Block());
 
     Statement PrintStatement()
     {
@@ -33,13 +62,32 @@ public class Parser(IReadOnlyList<Token> tokens)
         return new ExpressionStatement(value);
     }
 
-    Expr Expression() => Equality();
-    Expr Equality() => Binary(Comparison, TokenType.BangEqual, TokenType.EqualEqual);
-    Expr Comparison() => Binary(Term, TokenType.Greater, TokenType.GreaterEqual, TokenType.Less, TokenType.LessEqual);
-    Expr Term() => Binary(Factor, TokenType.Minus, TokenType.Plus);
-    Expr Factor() => Binary(Unary, TokenType.Slash, TokenType.Star);
+    Expression Expression() => Assignment();
 
-    Expr Binary(Func<Expr> nextExpr, params TokenType[] tokenTypes)
+    Expression Assignment()
+    {
+        var expr = Equality();
+
+        if (CurrentMatches(TokenType.Equal))
+        {
+            var equals = PreviousToken();
+            var value = Assignment();
+
+            if (expr is VariableExpression var)
+                return new AssignmentExpression(var.Name, value);
+
+            Error(equals, "Invalid assignment target");
+        }
+
+        return expr;
+    }
+
+    Expression Equality() => Binary(Comparison, TokenType.BangEqual, TokenType.EqualEqual);
+    Expression Comparison() => Binary(Term, TokenType.Greater, TokenType.GreaterEqual, TokenType.Less, TokenType.LessEqual);
+    Expression Term() => Binary(Factor, TokenType.Minus, TokenType.Plus);
+    Expression Factor() => Binary(Unary, TokenType.Slash, TokenType.Star);
+
+    Expression Binary(Func<Expression> nextExpr, params TokenType[] tokenTypes)
     {
         var expr = nextExpr();
 
@@ -47,42 +95,58 @@ public class Parser(IReadOnlyList<Token> tokens)
         {
             var op = PreviousToken();
             var right = nextExpr();
-            expr = new BinaryExpr(expr, op, right);
+            expr = new BinaryExpression(expr, op, right);
         }
 
         return expr;
     }
 
-    Expr Unary()
+    Expression Unary()
     {
         if (CurrentMatches(TokenType.Bang, TokenType.Minus))
         {
             var op = PreviousToken();
             var right = Unary();
-            return new UnaryExpr(op, right);
+            return new UnaryExpression(op, right);
         }
 
         return Primary();
     }
 
-    Expr Primary()
+    Expression Primary()
     {
-        if (CurrentMatches(TokenType.False)) return new LiteralExpr(false);
-        if (CurrentMatches(TokenType.True)) return new LiteralExpr(true);
-        if (CurrentMatches(TokenType.Nil)) return new LiteralExpr(null);
+        if (CurrentMatches(TokenType.False)) return new LiteralExpression(false);
+        if (CurrentMatches(TokenType.True)) return new LiteralExpression(true);
+        if (CurrentMatches(TokenType.Nil)) return new LiteralExpression(null);
 
         if (CurrentMatches(TokenType.Number, TokenType.String))
-            return new LiteralExpr(PreviousToken().Literal!);
+            return new LiteralExpression(PreviousToken().Literal!);
+
+        if (CurrentMatches(TokenType.Identifier))
+            return new VariableExpression(PreviousToken());
 
         if (CurrentMatches(TokenType.LeftParen))
         {
             var expr = Expression();
             Consume(TokenType.RightParen, "Expected a closing ')' after expression");
-            return new GroupingExpr(expr);
+            return new GroupingExpression(expr);
         }
 
         throw Error(Peek(), "Not a valid expression start symbol");
     }
+
+    List<Statement> Block()
+    {
+        List<Statement> statements = new();
+
+        while (!CheckCurrent(TokenType.RightBrace) && !IsAtEnd())
+            if (Declaration() is { } statement)
+                statements.Add(statement);
+
+        Consume(TokenType.RightBrace, "A block should end with '}'");
+        return statements;
+    }
+
 
     bool CurrentMatches(params TokenType[] types)
     {
@@ -112,7 +176,7 @@ public class Parser(IReadOnlyList<Token> tokens)
         return new();
     }
 
-    void Synchronize()
+    void PanicAndSynchronize()
     {
         Advance();
 

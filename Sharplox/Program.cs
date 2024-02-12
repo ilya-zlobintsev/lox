@@ -33,6 +33,7 @@ public static class Lox
     {
         while (true)
         {
+            Console.Write("> ");
             var line = Console.ReadLine();
             if (line is null) break;
             Run(line);
@@ -48,7 +49,9 @@ public static class Lox
         var statements = parser.Parse();
         if (_hadError) return;
         
-        Interpreter.Interpret(statements);
+        var output = Interpreter.Interpret(statements);
+        if (output is not null)
+            Console.WriteLine(Interpreter.Stringify(output));
     }
 
     static bool _hadError;

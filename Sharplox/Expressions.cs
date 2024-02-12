@@ -1,40 +1,46 @@
 namespace Sharplox;
 
-public abstract record Expr
+public abstract record Expression
 {
     public abstract TR Accept<TR>(IExpressionVisitor<TR> visitor);
 }
 
-public record UnaryExpr(Token Operator, Expr Right) : Expr
+public record UnaryExpression(Token Operator, Expression Right) : Expression
 {
-    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitUnaryExpr(this);
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitUnaryExpression(this);
 }
 
-public record BinaryExpr(Expr Left, Token Operator, Expr Right) : Expr
+public record BinaryExpression(Expression Left, Token Operator, Expression Right) : Expression
 {
-    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitBinaryExpr(this);
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitBinaryExpression(this);
 }
 
-public record GroupingExpr(Expr Expression) : Expr
+public record GroupingExpression(Expression Expression) : Expression
 {
-    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitGroupingExpr(this);
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitGroupingExpression(this);
 }
 
-public record LiteralExpr(object? Value) : Expr
+public record LiteralExpression(object? Value) : Expression
 {
-    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitLiteralExpr(this);
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitLiteralExpression(this);
 }
 
-public record VariableExpr(Token Name) : Expr
+public record VariableExpression(Token Name) : Expression
 {
-    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitVariableExpr(this);
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitVariableExpression(this);
 }
 
-public interface IExpressionVisitor<TR>
+public record AssignmentExpression(Token Name, Expression Value) : Expression
 {
-    TR VisitUnaryExpr(UnaryExpr expr);
-    TR VisitBinaryExpr(BinaryExpr expr);
-    TR VisitGroupingExpr(GroupingExpr expr);
-    TR VisitLiteralExpr(LiteralExpr expr);
-    TR VisitVariableExpr(VariableExpr expr);
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitAssignmentExpression(this);
+}
+
+public interface IExpressionVisitor<out TR>
+{
+    TR VisitUnaryExpression(UnaryExpression expr);
+    TR VisitBinaryExpression(BinaryExpression expr);
+    TR VisitGroupingExpression(GroupingExpression expr);
+    TR VisitLiteralExpression(LiteralExpression expr);
+    TR VisitVariableExpression(VariableExpression expr);
+    TR VisitAssignmentExpression(AssignmentExpression expr);
 }
