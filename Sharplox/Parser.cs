@@ -1,6 +1,6 @@
 namespace Sharplox;
 
-public struct Parser(IReadOnlyList<Token> tokens)
+public class Parser(IReadOnlyList<Token> tokens)
 {
     int _current;
 
