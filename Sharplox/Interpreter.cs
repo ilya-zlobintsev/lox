@@ -1,9 +1,20 @@
+using System.Linq.Expressions;
+using System.Runtime.InteropServices.Marshalling;
+
 namespace Sharplox;
 
 // The Statement visitor always returns null, because statements don't have a return value
 public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object?>
 {
-    Environment _environment = new();
+    public readonly Environment Globals = new();
+    Environment _environment;
+
+    public Interpreter()
+    {
+        _environment = Globals;
+
+        Globals.Define("clock", new Clock());
+    }
 
     public object? Interpret(List<Statement> statements)
     {
@@ -119,6 +130,23 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         return Evaluate(expr.Right);
     }
 
+    public object? VisitCallExpression(CallExpression expr)
+    {
+        var callee = Evaluate(expr.Callee);
+
+        var arguments = expr.Arguments.Select(Evaluate).ToArray();
+
+        if (callee is ILoxCallable callable)
+        {
+            if (arguments.Length != callable.Arity())
+                throw new RuntimeError(expr.Paren, $"Expected {callable.Arity()} arguments, got {arguments.Length}");
+
+            return callable.Call(this, arguments);
+        }
+
+        throw new RuntimeError(expr.Paren, $"Only call functions and classes are callable");
+    }
+
     public object? VisitLiteralExpression(LiteralExpression expr) => expr.Value;
 
     // Statements
@@ -171,11 +199,27 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         return null;
     }
 
+    public object? VisitFunctionStatement(FunctionStatement stmt)
+    {
+        LoxFunction function = new(stmt, _environment);
+        _environment.Define(stmt.Name.Lexeme, function);
+        return null;
+    }
+
+    public object? VisitReturnStatement(ReturnStatement stmt)
+    {
+        object? returnValue = null;
+        if (stmt.Value is not null)
+            returnValue = Evaluate(stmt.Value);
+
+        throw new Return(returnValue);
+    }
+
     // Utilities
     object? Evaluate(Expression expr) => expr.Accept(this);
     void Execute(Statement stmt) => stmt.Accept(this);
 
-    void ExecuteBlock(List<Statement> statements, Environment currentEnvironment)
+    public void ExecuteBlock(List<Statement> statements, Environment currentEnvironment)
     {
         var previousEnvironment = _environment;
         try
@@ -220,4 +264,9 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
 public class RuntimeError(Token token, string message) : Exception(message)
 {
     public Token Token { get; } = token;
+}
+
+public class Return(object? value) : Exception(null)
+{
+    public object? Value { get; } = value;
 }

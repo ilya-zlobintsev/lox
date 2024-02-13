@@ -35,6 +35,16 @@ public record WhileStatement(Expression Condition, Statement Body) : Statement
     public override TR Accept<TR>(IStatementVisitor<TR> visitor) => visitor.VisitWhileStatement(this);
 }
 
+public record FunctionStatement(Token Name, List<Token> Params, List<Statement> Body) : Statement
+{
+    public override TR Accept<TR>(IStatementVisitor<TR> visitor) => visitor.VisitFunctionStatement(this);
+}
+
+public record ReturnStatement(Token Keyword, Expression? Value) : Statement
+{
+    public override TR Accept<TR>(IStatementVisitor<TR> visitor) => visitor.VisitReturnStatement(this);
+}
+
 public interface IStatementVisitor<out TR>
 {
     TR VisitExpressionStatement(ExpressionStatement stmt);
@@ -43,4 +53,6 @@ public interface IStatementVisitor<out TR>
     TR VisitBlockStatement(BlockStatement stmt);
     TR VisitIfStatement(IfStatement stmt);
     TR VisitWhileStatement(WhileStatement stmt);
+    TR VisitFunctionStatement(FunctionStatement stmt);
+    TR VisitReturnStatement(ReturnStatement stmt);
 }

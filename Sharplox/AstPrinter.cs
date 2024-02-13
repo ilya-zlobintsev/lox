@@ -25,6 +25,7 @@ public class AstPrinter : IExpressionVisitor<string>
     public string VisitGroupingExpression(GroupingExpression expr) => PrintExpression("group", expr.Expression);
     public string VisitVariableExpression(VariableExpression expr) => PrintExpression(expr.Name.Lexeme);
     public string VisitAssignmentExpression(AssignmentExpression expr) => PrintExpression("assign", expr);
-    public string VisitLiteralExpression(LiteralExpression expr) => expr.Value?.ToString() ?? "nil";
+    public string VisitCallExpression(CallExpression expr) => PrintExpression("call", expr.Callee);
     public string VisitLogicalExpression(LogicalExpression expr) => PrintExpression(expr.Operator.Lexeme, expr.Left, expr.Right);
+    public string VisitLiteralExpression(LiteralExpression expr) => expr.Value?.ToString() ?? "nil";
 }

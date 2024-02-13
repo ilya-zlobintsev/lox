@@ -40,6 +40,11 @@ public record AssignmentExpression(Token Name, Expression Value) : Expression
     public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitAssignmentExpression(this);
 }
 
+public record CallExpression(Expression Callee, Token Paren, List<Expression> Arguments) : Expression
+{
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitCallExpression(this);
+}
+
 public interface IExpressionVisitor<out TR>
 {
     TR VisitUnaryExpression(UnaryExpression expr);
@@ -49,4 +54,5 @@ public interface IExpressionVisitor<out TR>
     TR VisitVariableExpression(VariableExpression expr);
     TR VisitAssignmentExpression(AssignmentExpression expr);
     TR VisitLogicalExpression(LogicalExpression expr);
+    TR VisitCallExpression(CallExpression expr);
 }

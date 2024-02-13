@@ -1,7 +1,10 @@
+using System.Runtime.InteropServices.JavaScript;
+
 namespace Sharplox;
 
 public class Parser(IReadOnlyList<Token> tokens)
 {
+    private readonly static int MaxParamCount = 255;
     int _current;
 
     public List<Statement> Parse()
@@ -18,6 +21,7 @@ public class Parser(IReadOnlyList<Token> tokens)
     {
         try
         {
+            if (CurrentMatches(TokenType.Fun)) return Function("function");
             if (CurrentMatches(TokenType.Var)) return VariableDeclaration();
             return Statement();
         }
@@ -26,6 +30,31 @@ public class Parser(IReadOnlyList<Token> tokens)
             PanicAndSynchronize();
             return null;
         }
+    }
+
+    Statement Function(string kind)
+    {
+        var name = ConsumeToken(TokenType.Identifier, $"Expected a {kind} name");
+        ConsumeToken(TokenType.LeftParen, $"Expected a '(' after {kind} name");
+        List<Token> parameters = [];
+
+        if (!CheckCurrent(TokenType.RightParen))
+        {
+            do
+            {
+                if (parameters.Count >= MaxParamCount)
+                    Error(Peek(), $"Cannot have more than {MaxParamCount} parameters");
+
+                var param = ConsumeToken(TokenType.Identifier, "Expected a parameter name");
+                parameters.Add(param);
+            } while (CurrentMatches(TokenType.Comma));
+        }
+
+        ConsumeToken(TokenType.RightParen, "Expected a ')' after parameters.");
+        ConsumeToken(TokenType.LeftBrace, $"Expected the {kind} body to start with a '{{'");
+        var body = Block();
+
+        return new FunctionStatement(name, parameters, body);
     }
 
     Statement VariableDeclaration()
@@ -44,6 +73,7 @@ public class Parser(IReadOnlyList<Token> tokens)
         if (CurrentMatches(TokenType.For)) return ForStatement();
         if (CurrentMatches(TokenType.If)) return IfStatement();
         if (CurrentMatches(TokenType.Print)) return PrintStatement();
+        if (CurrentMatches(TokenType.Return)) return ReturnStatement();
         if (CurrentMatches(TokenType.While)) return WhileStatement();
         if (CurrentMatches(TokenType.LeftBrace)) return BlockStatement();
         return ExpressionStatement();
@@ -83,7 +113,7 @@ public class Parser(IReadOnlyList<Token> tokens)
 
         if (initializer is not null)
             body = new BlockStatement([initializer, body]);
-        
+
         return body;
     }
 
@@ -107,6 +137,17 @@ public class Parser(IReadOnlyList<Token> tokens)
         var body = Statement();
 
         return new WhileStatement(condition, body);
+    }
+
+    Statement ReturnStatement()
+    {
+        var keyword = PreviousToken();
+        Expression? value = null;
+        if (!CheckCurrent(TokenType.Semicolon))
+            value = Expression();
+
+        ConsumeToken(TokenType.Semicolon, $"Expected a ';' after the return value");
+        return new ReturnStatement(keyword, value);
     }
 
     Statement PrintStatement()
@@ -199,7 +240,43 @@ public class Parser(IReadOnlyList<Token> tokens)
             return new UnaryExpression(op, right);
         }
 
-        return Primary();
+        return Call();
+    }
+
+    Expression Call()
+    {
+        var expr = Primary();
+
+        while (true)
+        {
+            if (CurrentMatches(TokenType.LeftParen))
+                expr = FinishCall(expr);
+            else
+                break;
+        }
+
+        return expr;
+    }
+
+    Expression FinishCall(Expression callee)
+    {
+        List<Expression> arguments = new();
+        if (!CheckCurrent(TokenType.RightParen))
+        {
+            do
+            {
+                if (arguments.Count >= MaxParamCount)
+                {
+                    Error(Peek(), $"Functions have a maximum of {MaxParamCount} arguments");
+                }
+
+                arguments.Add(Expression());
+            } while (CurrentMatches(TokenType.Comma));
+        }
+
+        var paren = ConsumeToken(TokenType.RightParen, "Function arguments should be followed by a ')'");
+
+        return new CallExpression(callee, paren, arguments);
     }
 
     Expression Primary()
