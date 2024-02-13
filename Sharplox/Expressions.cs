@@ -15,6 +15,11 @@ public record BinaryExpression(Expression Left, Token Operator, Expression Right
     public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitBinaryExpression(this);
 }
 
+public record LogicalExpression(Expression Left, Token Operator, Expression Right) : Expression
+{
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitLogicalExpression(this);
+}
+
 public record GroupingExpression(Expression Expression) : Expression
 {
     public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitGroupingExpression(this);
@@ -43,4 +48,5 @@ public interface IExpressionVisitor<out TR>
     TR VisitLiteralExpression(LiteralExpression expr);
     TR VisitVariableExpression(VariableExpression expr);
     TR VisitAssignmentExpression(AssignmentExpression expr);
+    TR VisitLogicalExpression(LogicalExpression expr);
 }

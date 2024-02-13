@@ -25,10 +25,22 @@ public record PrintStatement(Expression Expression) : Statement
     public override TR Accept<TR>(IStatementVisitor<TR> visitor) => visitor.VisitPrintStatement(this);
 }
 
+public record IfStatement(Expression Condition, Statement ThenBranch, Statement? ElseBranch) : Statement
+{
+    public override TR Accept<TR>(IStatementVisitor<TR> visitor) => visitor.VisitIfStatement(this);
+}
+
+public record WhileStatement(Expression Condition, Statement Body) : Statement
+{
+    public override TR Accept<TR>(IStatementVisitor<TR> visitor) => visitor.VisitWhileStatement(this);
+}
+
 public interface IStatementVisitor<out TR>
 {
     TR VisitExpressionStatement(ExpressionStatement stmt);
     TR VisitPrintStatement(PrintStatement stmt);
     TR VisitVariableStatement(VariableStatement stmt);
     TR VisitBlockStatement(BlockStatement stmt);
+    TR VisitIfStatement(IfStatement stmt);
+    TR VisitWhileStatement(WhileStatement stmt);
 }

@@ -104,6 +104,21 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         return value;
     }
 
+    public object? VisitLogicalExpression(LogicalExpression expr)
+    {
+        var left = Evaluate(expr.Left);
+
+        if (expr.Operator.Type == TokenType.Or)
+            if (IsTruthy(left))
+                return left;
+
+        if (expr.Operator.Type == TokenType.And)
+            if (!IsTruthy(left))
+                return left;
+
+        return Evaluate(expr.Right);
+    }
+
     public object? VisitLiteralExpression(LiteralExpression expr) => expr.Value;
 
     // Statements
@@ -136,6 +151,26 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         return null;
     }
 
+    public object? VisitIfStatement(IfStatement stmt)
+    {
+        if (IsTruthy(Evaluate(stmt.Condition)))
+            Execute(stmt.ThenBranch);
+        else if (stmt.ElseBranch is not null)
+            Execute(stmt.ElseBranch);
+
+        return null;
+    }
+
+    public object? VisitWhileStatement(WhileStatement stmt)
+    {
+        while (IsTruthy(Evaluate(stmt.Condition)))
+        {
+            Execute(stmt.Body);
+        }
+
+        return null;
+    }
+
     // Utilities
     object? Evaluate(Expression expr) => expr.Accept(this);
     void Execute(Statement stmt) => stmt.Accept(this);
@@ -156,7 +191,7 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         }
     }
 
-    bool IsTruthy(object data) => data switch
+    bool IsTruthy(object? data) => data switch
     {
         bool value => value,
         null => false,

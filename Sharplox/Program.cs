@@ -61,7 +61,7 @@ public static class Lox
 
     public static void Error(Token token, string message)
     {
-        var where = token.Type == TokenType.Eof ? " at end" : $" at '{token.Lexeme}'";
+        var where = token.Type == TokenType.Eof ? "at end" : $" at '{token.Lexeme}'";
         ReportError(token.Line, where, message);
     }
 
