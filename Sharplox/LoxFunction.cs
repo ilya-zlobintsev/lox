@@ -1,12 +1,12 @@
 namespace Sharplox;
 
-public class LoxFunction(FunctionStatement declaration, Environment Closure) : ILoxCallable
+public class LoxFunction(FunctionExpression declaration, Environment closure) : ILoxCallable
 {
     public int Arity() => declaration.Params.Count;
 
     public object? Call(Interpreter interpreter, IReadOnlyList<object?> arguments)
     {
-        Environment environment = new(Closure);
+        Environment environment = new(closure);
 
         for (var i = 0; i < declaration.Params.Count; i++)
             environment.Define(declaration.Params[i].Lexeme, arguments[i]);

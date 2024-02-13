@@ -21,7 +21,6 @@ public class Parser(IReadOnlyList<Token> tokens)
     {
         try
         {
-            if (CurrentMatches(TokenType.Fun)) return Function("function");
             if (CurrentMatches(TokenType.Var)) return VariableDeclaration();
             return Statement();
         }
@@ -30,31 +29,6 @@ public class Parser(IReadOnlyList<Token> tokens)
             PanicAndSynchronize();
             return null;
         }
-    }
-
-    Statement Function(string kind)
-    {
-        var name = ConsumeToken(TokenType.Identifier, $"Expected a {kind} name");
-        ConsumeToken(TokenType.LeftParen, $"Expected a '(' after {kind} name");
-        List<Token> parameters = [];
-
-        if (!CheckCurrent(TokenType.RightParen))
-        {
-            do
-            {
-                if (parameters.Count >= MaxParamCount)
-                    Error(Peek(), $"Cannot have more than {MaxParamCount} parameters");
-
-                var param = ConsumeToken(TokenType.Identifier, "Expected a parameter name");
-                parameters.Add(param);
-            } while (CurrentMatches(TokenType.Comma));
-        }
-
-        ConsumeToken(TokenType.RightParen, "Expected a ')' after parameters.");
-        ConsumeToken(TokenType.LeftBrace, $"Expected the {kind} body to start with a '{{'");
-        var body = Block();
-
-        return new FunctionStatement(name, parameters, body);
     }
 
     Statement VariableDeclaration()
@@ -160,11 +134,39 @@ public class Parser(IReadOnlyList<Token> tokens)
     Statement ExpressionStatement()
     {
         var value = Expression();
-        ConsumeToken(TokenType.Semicolon, "Missing ';' after an expression");
+        // Do not require a semicolon if the expression ends with a brace
+        // This is required as function declarations are expressions, but they shouldn't be followed by a semicolon
+        if (PreviousToken().Type != TokenType.RightBrace)
+            ConsumeToken(TokenType.Semicolon, "Missing ';' after an expression");
         return new ExpressionStatement(value);
     }
 
-    Expression Expression() => Assignment();
+    Expression Expression() => CurrentMatches(TokenType.Fun) ? Function("function") : Assignment();
+
+    Expression Function(string kind)
+    {
+        var name = CheckCurrent(TokenType.Identifier) ? Advance() : null;
+        ConsumeToken(TokenType.LeftParen, $"Expected a '(' after {kind} name");
+        List<Token> parameters = [];
+
+        if (!CheckCurrent(TokenType.RightParen))
+        {
+            do
+            {
+                if (parameters.Count >= MaxParamCount)
+                    Error(Peek(), $"Cannot have more than {MaxParamCount} parameters");
+
+                var param = ConsumeToken(TokenType.Identifier, "Expected a parameter name");
+                parameters.Add(param);
+            } while (CurrentMatches(TokenType.Comma));
+        }
+
+        ConsumeToken(TokenType.RightParen, "Expected a ')' after parameters.");
+        ConsumeToken(TokenType.LeftBrace, $"Expected the {kind} body to start with a '{{'");
+        var body = Block();
+
+        return new FunctionExpression(name, parameters, body);
+    }
 
     Expression Assignment()
     {

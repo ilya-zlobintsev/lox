@@ -199,11 +199,12 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         return null;
     }
 
-    public object? VisitFunctionStatement(FunctionStatement stmt)
+    public object? VisitFunctionExpression(FunctionExpression expr)
     {
-        LoxFunction function = new(stmt, _environment);
-        _environment.Define(stmt.Name.Lexeme, function);
-        return null;
+        LoxFunction function = new(expr, _environment);
+        if (expr.Name is not null)
+            _environment.Define(expr.Name.Lexeme, function);
+        return function;
     }
 
     public object? VisitReturnStatement(ReturnStatement stmt)
