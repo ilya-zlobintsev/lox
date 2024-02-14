@@ -45,8 +45,13 @@ public static class Lox
     {
         Lexer lexer = new(source);
         var tokens = lexer.ScanTokens();
+        
         Parser parser = new(tokens);
         var statements = parser.Parse();
+        if (_hadError) return;
+
+        Resolver resolver = new(Interpreter);
+        resolver.Resolve(statements);
         if (_hadError) return;
         
         var output = Interpreter.Interpret(statements);

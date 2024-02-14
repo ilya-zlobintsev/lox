@@ -1,19 +1,17 @@
-using System.Linq.Expressions;
-using System.Runtime.InteropServices.Marshalling;
-
 namespace Sharplox;
 
 // The Statement visitor always returns null, because statements don't have a return value
 public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object?>
 {
-    public readonly Environment Globals = new();
+    readonly Environment _globals = new();
     Environment _environment;
+    readonly Dictionary<Expression, int> _locals = new(ReferenceEqualityComparer.Instance);
 
     public Interpreter()
     {
-        _environment = Globals;
+        _environment = _globals;
 
-        Globals.Define("clock", new Clock());
+        _globals.Define("clock", new Clock());
     }
 
     public object? Interpret(List<Statement> statements)
@@ -106,12 +104,25 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
     }
 
     public object? VisitGroupingExpression(GroupingExpression expr) => Evaluate(expr.Expression);
-    public object? VisitVariableExpression(VariableExpression expr) => _environment.Get(expr.Name);
+    public object? VisitVariableExpression(VariableExpression expr) => LookupVariable(expr.Name, expr);
+
+    object? LookupVariable(Token name, Expression expr)
+    {
+        if (_locals.TryGetValue(expr, out var local))
+            return _environment.GetAt(local, name.Lexeme);
+
+        return _globals.Get(name);
+    }
 
     public object? VisitAssignmentExpression(AssignmentExpression expr)
     {
         var value = Evaluate(expr.Value);
-        _environment.Assign(expr.Name, value);
+
+        if (_locals.TryGetValue(expr, out var distance))
+            _environment.AssignAt(distance, expr.Name, value);
+        else
+            _globals.Assign(expr.Name, value);
+
         return value;
     }
 
@@ -199,15 +210,16 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         return null;
     }
 
-    public object? VisitFunctionExpression(FunctionExpression expr)
+    public object VisitFunctionExpression(FunctionExpression expr)
     {
         LoxFunction function = new(expr, _environment);
         if (expr.Name is not null)
             _environment.Define(expr.Name.Lexeme, function);
+
         return function;
     }
 
-    public object? VisitReturnStatement(ReturnStatement stmt)
+    public object VisitReturnStatement(ReturnStatement stmt)
     {
         object? returnValue = null;
         if (stmt.Value is not null)
@@ -236,6 +248,8 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         }
     }
 
+    public void Resolve(Expression expr, int depth) => _locals[expr] = depth;
+
     bool IsTruthy(object? data) => data switch
     {
         bool value => value,
@@ -248,10 +262,10 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
     void CheckNumberOperands(Token op, object? left, object? right)
     {
         if (left is not double)
-            throw new RuntimeError(op, "Left operand is not a number");
+            throw new RuntimeError(op, $"Left operand is not a number (got type {left?.GetType().FullName})");
 
         if (right is not double)
-            throw new RuntimeError(op, "Right operand is not a number");
+            throw new RuntimeError(op, $"Right operand is not a number (got type {right?.GetType().FullName})");
     }
 
     public static string Stringify(object? value) => value switch
