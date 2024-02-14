@@ -21,6 +21,7 @@ public class Parser(IReadOnlyList<Token> tokens)
     {
         try
         {
+            if (CurrentMatches(TokenType.Class)) return ClassDeclaration();
             if (CurrentMatches(TokenType.Var)) return VariableDeclaration();
             return Statement();
         }
@@ -29,6 +30,26 @@ public class Parser(IReadOnlyList<Token> tokens)
             PanicAndSynchronize();
             return null;
         }
+    }
+
+    Statement ClassDeclaration()
+    {
+        var name = ConsumeToken(TokenType.Identifier, "Expected a valid class name");
+        VariableExpression? superclass = null;
+        if (CurrentMatches(TokenType.Less))
+        {
+            ConsumeToken(TokenType.Identifier, "Superclass name missing");
+            superclass = new VariableExpression(PreviousToken());
+        } 
+        
+        ConsumeToken(TokenType.LeftBrace, "Expected a '{' before the class body");
+
+        List<FunctionExpression> methods = [];
+        while (!CheckCurrent(TokenType.RightBrace) && !IsAtEnd())
+            methods.Add(Function("method"));
+
+        ConsumeToken(TokenType.RightBrace, "Expected a '}' after the class body");
+        return new ClassStatement(name, superclass, methods);
     }
 
     Statement VariableDeclaration()
@@ -138,12 +159,13 @@ public class Parser(IReadOnlyList<Token> tokens)
         // This is required as function declarations are expressions, but they shouldn't be followed by a semicolon
         if (PreviousToken().Type != TokenType.RightBrace)
             ConsumeToken(TokenType.Semicolon, "Missing ';' after an expression");
+
         return new ExpressionStatement(value);
     }
 
     Expression Expression() => CurrentMatches(TokenType.Fun) ? Function("function") : Assignment();
 
-    Expression Function(string kind)
+    FunctionExpression Function(string kind)
     {
         var name = CheckCurrent(TokenType.Identifier) ? Advance() : null;
         ConsumeToken(TokenType.LeftParen, $"Expected a '(' after {kind} name");
@@ -177,10 +199,16 @@ public class Parser(IReadOnlyList<Token> tokens)
             var equals = PreviousToken();
             var value = Assignment();
 
-            if (expr is VariableExpression var)
-                return new AssignmentExpression(var.Name, value);
-
-            Error(equals, "Invalid assignment target");
+            switch (expr)
+            {
+                case VariableExpression var:
+                    return new AssignmentExpression(var.Name, value);
+                case GetExpression get:
+                    return new SetExpression(get.Instance, get.Name, value);
+                default:
+                    Error(equals, "Invalid assignment target");
+                    break;
+            }
         }
 
         return expr;
@@ -253,6 +281,11 @@ public class Parser(IReadOnlyList<Token> tokens)
         {
             if (CurrentMatches(TokenType.LeftParen))
                 expr = FinishCall(expr);
+            else if (CurrentMatches(TokenType.Dot))
+            {
+                var name = ConsumeToken(TokenType.Identifier, "'.' should be followed by a property name");
+                expr = new GetExpression(expr, name);
+            }
             else
                 break;
         }
@@ -290,6 +323,17 @@ public class Parser(IReadOnlyList<Token> tokens)
         if (CurrentMatches(TokenType.Number, TokenType.String))
             return new LiteralExpression(PreviousToken().Literal!);
 
+        if (CurrentMatches(TokenType.Super))
+        {
+            var keyword = PreviousToken();
+            ConsumeToken(TokenType.Dot, "Expected a '.' after 'super'");
+            var method = ConsumeToken(TokenType.Identifier, "Expected a superclass method name");
+            return new SuperExpression(keyword, method);
+        }
+
+        if (CurrentMatches(TokenType.This))
+            return new ThisExpression(PreviousToken());
+        
         if (CurrentMatches(TokenType.Identifier))
             return new VariableExpression(PreviousToken());
 

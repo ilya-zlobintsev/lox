@@ -3,17 +3,17 @@ namespace Sharplox;
 public class Environment(Environment? enclosing = null)
 {
     readonly Dictionary<string, object?> _values = new();
-    private readonly Environment? _enclosing = enclosing;
+    public readonly Environment? Enclosing = enclosing;
 
     public object? Get(Token name)
     {
         if (_values.TryGetValue(name.Lexeme, out var value))
             return value;
 
-        if (_enclosing is null)
+        if (Enclosing is null)
             throw new RuntimeError(name, $"Undefined variable '{name.Lexeme}'");
 
-        return _enclosing.Get(name);
+        return Enclosing.Get(name);
     }
 
     public void Define(string name, object? value) => _values[name] = value;
@@ -26,10 +26,10 @@ public class Environment(Environment? enclosing = null)
             return;
         }
 
-        if (_enclosing is null)
+        if (Enclosing is null)
             throw new RuntimeError(name, $"Undefined variable '{name.Lexeme}'");
 
-        _enclosing.Assign(name, value);
+        Enclosing.Assign(name, value);
     }
 
     public object? GetAt(int distance, string name) => Ancestor(distance)._values.GetValueOrDefault(name);
@@ -39,7 +39,7 @@ public class Environment(Environment? enclosing = null)
     {
         var environment = this;
         for (var i = 0; i < distance; i++)
-            environment = environment!._enclosing;
+            environment = environment!.Enclosing;
 
         return environment!;
     }

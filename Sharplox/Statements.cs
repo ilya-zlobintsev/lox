@@ -40,6 +40,11 @@ public record ReturnStatement(Token Keyword, Expression? Value) : Statement
     public override TR Accept<TR>(IStatementVisitor<TR> visitor) => visitor.VisitReturnStatement(this);
 }
 
+public record ClassStatement(Token Name, VariableExpression? Superclass, List<FunctionExpression> Methods) : Statement
+{
+    public override TR Accept<TR>(IStatementVisitor<TR> visitor) => visitor.VisitClassStatement(this);
+}
+
 public interface IStatementVisitor<out TR>
 {
     TR VisitExpressionStatement(ExpressionStatement stmt);
@@ -49,4 +54,5 @@ public interface IStatementVisitor<out TR>
     TR VisitIfStatement(IfStatement stmt);
     TR VisitWhileStatement(WhileStatement stmt);
     TR VisitReturnStatement(ReturnStatement stmt);
+    TR VisitClassStatement(ClassStatement stmt);
 }

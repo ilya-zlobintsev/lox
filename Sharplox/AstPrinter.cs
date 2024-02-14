@@ -27,6 +27,11 @@ public class AstPrinter : IExpressionVisitor<string>
     public string VisitAssignmentExpression(AssignmentExpression expr) => PrintExpression("assign", expr);
     public string VisitCallExpression(CallExpression expr) => PrintExpression("call", expr.Callee);
     public string VisitFunctionExpression(FunctionExpression expr) => PrintExpression("fun", expr);
+    public string VisitGetExpression(GetExpression expr) => PrintExpression("get", expr);
+    public string VisitSetExpression(SetExpression expr) => PrintExpression("set", expr);
+    public string VisitThisExpression(ThisExpression expr) => PrintExpression("this", expr);
+    public string VisitSuperExpression(SuperExpression expr) => PrintExpression("super", expr);
+
     public string VisitLogicalExpression(LogicalExpression expr) => PrintExpression(expr.Operator.Lexeme, expr);
     public string VisitLiteralExpression(LiteralExpression expr) => expr.Value?.ToString() ?? "nil";
 }

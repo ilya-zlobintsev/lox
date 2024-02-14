@@ -4,12 +4,22 @@ public class Resolver(Interpreter interpreter) : IExpressionVisitor<object?>, IS
 {
     readonly List<Dictionary<string, bool>> _scopes = new();
     FunctionType _currentFunction = FunctionType.None;
+    ClassType _currentClass = ClassType.None;
     Dictionary<string, bool>? TopScope => _scopes.Count == 0 ? null : _scopes[^1];
 
     enum FunctionType
     {
         None,
         Function,
+        Initializer,
+        Method,
+    }
+
+    enum ClassType
+    {
+        None,
+        Class,
+        Subclass,
     }
 
     public void Resolve(List<Statement> statements)
@@ -85,6 +95,49 @@ public class Resolver(Interpreter interpreter) : IExpressionVisitor<object?>, IS
         return null;
     }
 
+    public object? VisitGetExpression(GetExpression expr)
+    {
+        Resolve(expr.Instance);
+        return null;
+    }
+
+    public object? VisitSetExpression(SetExpression expr)
+    {
+        Resolve(expr.Value);
+        Resolve(expr.Instance);
+        return null;
+    }
+
+    public object? VisitThisExpression(ThisExpression expr)
+    {
+        if (_currentClass == ClassType.None)
+        {
+            Lox.Error(expr.Keyword, "Cannot use 'this' outside of a class");
+            return null;
+        }
+
+        ResolveLocal(expr, expr.Keyword);
+        return null;
+    }
+
+    public object? VisitSuperExpression(SuperExpression expr)
+    {
+        switch (_currentClass)
+        {
+            case ClassType.None:
+                Lox.Error(expr.Keyword, "Cannot use 'super' outside of a class");
+                break;
+            case ClassType.Class:
+                Lox.Error(expr.Keyword, "Cannot use 'super' in a class with no subclass");
+                break;
+            default:
+                ResolveLocal(expr, expr.Keyword);
+                break;
+        }
+
+        return null;
+    }
+
     public object? VisitExpressionStatement(ExpressionStatement stmt)
     {
         Resolve(stmt.Expression);
@@ -135,9 +188,52 @@ public class Resolver(Interpreter interpreter) : IExpressionVisitor<object?>, IS
 
     public object? VisitReturnStatement(ReturnStatement stmt)
     {
-        if (stmt.Value is not null)
-            Resolve(stmt.Value);
+        if (stmt.Value is null) return null;
 
+        if (_currentFunction == FunctionType.Initializer)
+            Lox.Error(stmt.Keyword, "'return' is not allowed in an initializer");
+
+        Resolve(stmt.Value);
+
+        return null;
+    }
+
+    public object? VisitClassStatement(ClassStatement stmt)
+    {
+        var enclosingClass = _currentClass;
+        _currentClass = ClassType.Class;
+
+        Declare(stmt.Name);
+        Define(stmt.Name);
+
+        if (stmt.Superclass is not null)
+        {
+            if (stmt.Superclass.Name.Lexeme == stmt.Name.Lexeme)
+                Lox.Error(stmt.Superclass.Name, "Class cannot inherit from itself");
+
+            _currentClass = ClassType.Subclass;
+            Resolve(stmt.Superclass);
+        }
+
+        if (stmt.Superclass is not null)
+        {
+            BeginScope();
+            TopScope!.Add("super", true);
+        }
+
+        BeginScope();
+        TopScope?.Add("this", true);
+
+        foreach (var method in stmt.Methods)
+        {
+            var declaration = method.Name?.Lexeme == "init" ? FunctionType.Initializer : FunctionType.Method;
+            ResolveFunction(method, declaration);
+        }
+
+        EndScope();
+        if (stmt.Superclass is not null) EndScope();
+
+        _currentClass = enclosingClass;
         return null;
     }
 

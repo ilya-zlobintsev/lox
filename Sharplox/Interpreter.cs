@@ -212,11 +212,46 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
 
     public object VisitFunctionExpression(FunctionExpression expr)
     {
-        LoxFunction function = new(expr, _environment);
+        LoxFunction function = new(expr, _environment, false);
         if (expr.Name is not null)
             _environment.Define(expr.Name.Lexeme, function);
 
         return function;
+    }
+
+    public object? VisitGetExpression(GetExpression expr)
+    {
+        var value = Evaluate(expr.Instance);
+        if (value is LoxInstance instance)
+            return instance.Get(expr.Name);
+
+        throw new RuntimeError(expr.Name, $"Only instances have properties, got {value?.GetType().Name}");
+    }
+
+    public object? VisitSetExpression(SetExpression expr)
+    {
+        var instance = Evaluate(expr.Instance) as LoxInstance ?? throw new RuntimeError(expr.Name, "Only instances have fields");
+        var value = Evaluate(expr.Value);
+        instance.Set(expr.Name, value);
+
+        return value;
+    }
+
+    public object? VisitThisExpression(ThisExpression expr) => LookupVariable(expr.Keyword, expr);
+
+    public object? VisitSuperExpression(SuperExpression expr)
+    {
+        var distance = _locals[expr];
+        if (distance == 0)
+            throw new("Super expressions should always be in a scope, this is a bug");
+
+        var superClass = (LoxClass)_environment.GetAt(distance, "super")!;
+        var instance = (LoxInstance)_environment.GetAt(distance - 1, "this")!;
+
+        var method = superClass.FindMethod(expr.Method.Lexeme) ??
+                     throw new RuntimeError(expr.Method, $"Undefined property '{expr.Method.Lexeme}'");
+
+        return method.Bind(instance);
     }
 
     public object VisitReturnStatement(ReturnStatement stmt)
@@ -226,6 +261,40 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
             returnValue = Evaluate(stmt.Value);
 
         throw new Return(returnValue);
+    }
+
+    public object? VisitClassStatement(ClassStatement stmt)
+    {
+        LoxClass? superClass = null;
+        if (stmt.Superclass is not null)
+        {
+            superClass = Evaluate(stmt.Superclass) as LoxClass ??
+                         throw new RuntimeError(stmt.Superclass.Name, "Classes can only inherit from other classes");
+        }
+
+        _environment.Define(stmt.Name.Lexeme, null);
+
+        if (stmt.Superclass is not null)
+        {
+            _environment = new(_environment);
+            _environment.Define("super", superClass);
+        }
+
+        Dictionary<string, LoxFunction> methods = new();
+        foreach (var method in stmt.Methods)
+        {
+            LoxFunction function = new(method, _environment, method.Name?.Lexeme == "init");
+            if (method.Name is not null)
+                methods.Add(method.Name.Lexeme, function);
+        }
+
+        LoxClass klass = new(stmt.Name.Lexeme, superClass, methods);
+
+        if (superClass is not null)
+            _environment = _environment.Enclosing!;
+
+        _environment.Assign(stmt.Name, klass);
+        return null;
     }
 
     // Utilities

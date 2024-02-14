@@ -45,6 +45,26 @@ public record CallExpression(Expression Callee, Token Paren, List<Expression> Ar
     public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitCallExpression(this);
 }
 
+public record GetExpression(Expression Instance, Token Name) : Expression
+{
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitGetExpression(this);
+}
+
+public record SetExpression(Expression Instance, Token Name, Expression Value) : Expression
+{
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitSetExpression(this);
+}
+
+public record ThisExpression(Token Keyword) : Expression
+{
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitThisExpression(this);
+}
+
+public record SuperExpression(Token Keyword, Token Method) : Expression
+{
+    public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitSuperExpression(this);
+}
+
 public record FunctionExpression(Token? Name, List<Token> Params, List<Statement> Body) : Expression
 {
     public override TR Accept<TR>(IExpressionVisitor<TR> visitor) => visitor.VisitFunctionExpression(this);
@@ -61,4 +81,8 @@ public interface IExpressionVisitor<out TR>
     TR VisitLogicalExpression(LogicalExpression expr);
     TR VisitCallExpression(CallExpression expr);
     TR VisitFunctionExpression(FunctionExpression expr);
+    TR VisitGetExpression(GetExpression expr);
+    TR VisitSetExpression(SetExpression expr);
+    TR VisitThisExpression(ThisExpression expr);
+    TR VisitSuperExpression(SuperExpression expr);
 }
