@@ -1,0 +1,18 @@
+print "while:";
+var i = 0;
+while (i < 10) {
+    i = i + 1;
+    if (i == 5) {
+        continue;
+    }
+    print i;
+}
+
+print "";
+print "for:";
+for (var i = 1; i <= 10; i = i + 1) {
+    if (i == 5) {
+        continue;
+    }
+    print i;
+}

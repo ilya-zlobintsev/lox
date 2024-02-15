@@ -1,0 +1,19 @@
+print "while:";
+
+var i = 1;
+while (true) {
+    if (i > 10) {
+        break;
+    }
+
+    print i;
+    i = i + 1;
+}
+
+print "for:";
+for (var i = 1; i <= 20; i = i + 1) {
+    if (i > 10) {
+        break;
+    }
+    print i;
+}

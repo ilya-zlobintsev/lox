@@ -2,9 +2,10 @@ namespace Sharplox;
 
 public class Resolver(Interpreter interpreter) : IExpressionVisitor<object?>, IStatementVisitor<object?>
 {
-    readonly List<Dictionary<string, bool>> _scopes = new();
+    readonly List<Dictionary<string, bool>> _scopes = [];
     FunctionType _currentFunction = FunctionType.None;
     ClassType _currentClass = ClassType.None;
+    LoopType _currentLoop = LoopType.None;
     Dictionary<string, bool>? TopScope => _scopes.Count == 0 ? null : _scopes[^1];
 
     enum FunctionType
@@ -20,6 +21,12 @@ public class Resolver(Interpreter interpreter) : IExpressionVisitor<object?>, IS
         None,
         Class,
         Subclass,
+    }
+
+    enum LoopType
+    {
+        None,
+        Loop,
     }
 
     public void Resolve(List<Statement> statements)
@@ -179,10 +186,17 @@ public class Resolver(Interpreter interpreter) : IExpressionVisitor<object?>, IS
         return null;
     }
 
-    public object? VisitWhileStatement(WhileStatement stmt)
+    public object? VisitLoopStatement(LoopStatement stmt)
     {
         Resolve(stmt.Condition);
+        if (stmt.Increment is not null)
+            Resolve(stmt.Increment);
+
+        var surroundingType = _currentLoop;
+        _currentLoop = LoopType.Loop;
         Resolve(stmt.Body);
+        _currentLoop = surroundingType;
+
         return null;
     }
 
@@ -234,6 +248,22 @@ public class Resolver(Interpreter interpreter) : IExpressionVisitor<object?>, IS
         if (stmt.Superclass is not null) EndScope();
 
         _currentClass = enclosingClass;
+        return null;
+    }
+
+    public object? VisitBreakStatement(BreakStatement stmt)
+    {
+        if (_currentLoop == LoopType.None)
+            Lox.Error(stmt.Keyword, "'break' can only be used in loops");
+
+        return null;
+    }
+
+    public object? VisitContinueStatement(ContinueStatement stmt)
+    {
+        if (_currentLoop == LoopType.None)
+            Lox.Error(stmt.Keyword, "'continue' can only be used in loops");
+
         return null;
     }
 

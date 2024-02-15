@@ -24,7 +24,7 @@ public enum TokenType
     If, Else,
     True, False,
     Fun, Class, This, Super,
-    While, For,
+    While, For, Break, Continue,
     Return, Nil,
     Print,
     

@@ -167,6 +167,8 @@ public class Lexer(string source)
             "else" => TokenType.Else,
             "while" => TokenType.While,
             "for" => TokenType.For,
+            "break" => TokenType.Break,
+            "continue" => TokenType.Continue,
             "true" => TokenType.True,
             "false" => TokenType.False,
             "fun" => TokenType.Fun,

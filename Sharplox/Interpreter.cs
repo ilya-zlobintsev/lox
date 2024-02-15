@@ -99,7 +99,8 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
             (string leftValue, string rightValue) => leftValue + rightValue,
             (string leftValue, double rightValue) => leftValue + rightValue,
             (double leftValue, string rightValue) => leftValue + rightValue,
-            _ => throw new RuntimeError(expr.Operator, "Operands must be either numbers or strings"),
+            _ => throw new RuntimeError(expr.Operator,
+                $"Operands must be either numbers or strings, got {left?.GetType().Name} and {right?.GetType().Name}"),
         };
     }
 
@@ -200,11 +201,26 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         return null;
     }
 
-    public object? VisitWhileStatement(WhileStatement stmt)
+    public object? VisitLoopStatement(LoopStatement stmt)
     {
         while (IsTruthy(Evaluate(stmt.Condition)))
         {
-            Execute(stmt.Body);
+            try
+            {
+                Execute(stmt.Body);
+            }
+            catch (Break)
+            {
+                break;
+            }
+            catch (Continue continueStatement)
+            {
+            }
+
+            if (stmt.Increment is not null)
+            {
+                Evaluate(stmt.Increment);
+            }
         }
 
         return null;
@@ -297,6 +313,9 @@ public class Interpreter : IExpressionVisitor<object?>, IStatementVisitor<object
         return null;
     }
 
+    public object? VisitBreakStatement(BreakStatement stmt) => throw new Break();
+    public object? VisitContinueStatement(ContinueStatement stmt) => throw new Continue();
+
     // Utilities
     object? Evaluate(Expression expr) => expr.Accept(this);
     void Execute(Statement stmt) => stmt.Accept(this);
@@ -354,3 +373,7 @@ public class Return(object? value) : Exception(null)
 {
     public object? Value { get; } = value;
 }
+
+public class Break() : Exception(null);
+
+public class Continue() : Exception(null);

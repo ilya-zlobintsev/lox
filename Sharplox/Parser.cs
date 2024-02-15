@@ -1,15 +1,13 @@
-using System.Runtime.InteropServices.JavaScript;
-
 namespace Sharplox;
 
 public class Parser(IReadOnlyList<Token> tokens)
 {
-    private readonly static int MaxParamCount = 255;
+    readonly static int MaxParamCount = 255;
     int _current;
 
     public List<Statement> Parse()
     {
-        List<Statement> statements = new();
+        List<Statement> statements = [];
         while (!IsAtEnd())
             if (Declaration() is { } statement)
                 statements.Add(statement);
@@ -39,9 +37,9 @@ public class Parser(IReadOnlyList<Token> tokens)
         if (CurrentMatches(TokenType.Less))
         {
             ConsumeToken(TokenType.Identifier, "Superclass name missing");
-            superclass = new VariableExpression(PreviousToken());
-        } 
-        
+            superclass = new(PreviousToken());
+        }
+
         ConsumeToken(TokenType.LeftBrace, "Expected a '{' before the class body");
 
         List<FunctionExpression> methods = [];
@@ -68,10 +66,26 @@ public class Parser(IReadOnlyList<Token> tokens)
         if (CurrentMatches(TokenType.For)) return ForStatement();
         if (CurrentMatches(TokenType.If)) return IfStatement();
         if (CurrentMatches(TokenType.Print)) return PrintStatement();
+        if (CurrentMatches(TokenType.Break)) return BreakStatement();
+        if (CurrentMatches(TokenType.Continue)) return ContinueStatement();
         if (CurrentMatches(TokenType.Return)) return ReturnStatement();
         if (CurrentMatches(TokenType.While)) return WhileStatement();
         if (CurrentMatches(TokenType.LeftBrace)) return BlockStatement();
         return ExpressionStatement();
+    }
+
+    Statement BreakStatement()
+    {
+        var keyword = PreviousToken();
+        ConsumeToken(TokenType.Semicolon, $"Expected a ';' after break");
+        return new BreakStatement(keyword);
+    }
+
+    Statement ContinueStatement()
+    {
+        var keyword = PreviousToken();
+        ConsumeToken(TokenType.Semicolon, $"Expected a ';' after break");
+        return new ContinueStatement(keyword);
     }
 
     Statement BlockStatement() => new BlockStatement(Block());
@@ -86,9 +100,7 @@ public class Parser(IReadOnlyList<Token> tokens)
         else if (!CurrentMatches(TokenType.Semicolon))
             initializer = ExpressionStatement();
 
-        Expression? condition = null;
-        if (!CheckCurrent(TokenType.Semicolon))
-            condition = Expression();
+        var condition = CheckCurrent(TokenType.Semicolon) ? new LiteralExpression(true) : Expression();
 
         ConsumeToken(TokenType.Semicolon, "Expected ';' after condition in 'for'");
 
@@ -100,15 +112,11 @@ public class Parser(IReadOnlyList<Token> tokens)
         ConsumeToken(TokenType.RightParen, "Expected ')' after 'for' clauses");
 
         var body = Statement();
-
-        if (increment is not null)
-            body = new BlockStatement([body, new ExpressionStatement(increment)]);
-
-        body = new WhileStatement(condition ?? new LiteralExpression(true), body);
+        body = new LoopStatement(condition, body, increment);
 
         if (initializer is not null)
             body = new BlockStatement([initializer, body]);
-
+        
         return body;
     }
 
@@ -131,7 +139,7 @@ public class Parser(IReadOnlyList<Token> tokens)
         ConsumeToken(TokenType.RightParen, "Expected ')' after condition in 'while'");
         var body = Statement();
 
-        return new WhileStatement(condition, body);
+        return new LoopStatement(condition, body, null);
     }
 
     Statement ReturnStatement()
@@ -333,7 +341,7 @@ public class Parser(IReadOnlyList<Token> tokens)
 
         if (CurrentMatches(TokenType.This))
             return new ThisExpression(PreviousToken());
-        
+
         if (CurrentMatches(TokenType.Identifier))
             return new VariableExpression(PreviousToken());
 
@@ -413,5 +421,5 @@ public class Parser(IReadOnlyList<Token> tokens)
         }
     }
 
-    private class ParseError : Exception;
+    class ParseError : Exception;
 }
