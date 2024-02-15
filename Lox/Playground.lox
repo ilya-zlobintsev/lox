@@ -1,0 +1,17 @@
+class Egotist {
+  init() {
+    print "Created an egotist";
+  }
+
+  speak() {
+    print this;
+  }
+}
+
+fun init() {
+    print "Unrelated totally not initializer function";
+}
+
+var method = Egotist().speak;
+method();
+init();
