@@ -47,6 +47,8 @@ impl Chunk {
         while offset < self.code.len() {
             offset = self.disassemble_instruction(offset);
         }
+
+        println!("=========");
     }
 
     pub fn disassemble_instruction(&self, mut offset: usize) -> usize {

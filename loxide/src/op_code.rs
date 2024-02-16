@@ -1,32 +1,44 @@
 use std::fmt::{self, Display};
 
-#[derive(Debug, Clone, Copy)]
-pub enum OpCode {
-    Return,
-    Constant,
-    LongConstant,
+macro_rules! instructions {
+    ($($name:ident = $value:literal,)+) => {
+        #[derive(Debug, Clone, Copy)]
+        pub enum OpCode {
+            $(
+                $name,
+            )+
+        }
+
+        impl OpCode {
+            pub fn as_byte(&self) -> u8 {
+                match self {
+                    $(
+                        OpCode::$name => $value,
+                    )+
+                }
+            }
+
+            pub fn from_byte(byte: u8) -> Option<Self> {
+                match byte {
+                    $(
+                        $value => Some(OpCode::$name),
+                    )+
+                    _ => None,
+                }
+            }
+        }
+    };
 }
 
-impl OpCode {
-    pub fn from_byte(byte: u8) -> Option<Self> {
-        use OpCode::*;
-        let op_code = match byte {
-            0 => Return,
-            1 => Constant,
-            2 => LongConstant,
-            _ => return None,
-        };
-        Some(op_code)
-    }
-
-    pub fn as_byte(&self) -> u8 {
-        use OpCode::*;
-        match self {
-            Return => 0,
-            Constant => 1,
-            LongConstant => 2,
-        }
-    }
+instructions! {
+    Return = 0,
+    Constant = 1,
+    LongConstant = 2,
+    Negate = 3,
+    Add = 4,
+    Subtract = 5,
+    Multiply = 6,
+    Divide = 7,
 }
 
 impl From<OpCode> for u8 {
