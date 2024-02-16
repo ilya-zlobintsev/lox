@@ -1,4 +1,4 @@
-use crate::{chunk::Chunk, op_code::OpCode, value::Value};
+use crate::{chunk::Chunk, compiler, op_code::OpCode, scanner::Scanner, value::Value};
 
 pub struct Vm {
     chunk: Chunk,
@@ -7,7 +7,13 @@ pub struct Vm {
 }
 
 impl Vm {
-    pub fn interpret(chunk: Chunk) -> InterpretResult {
+    pub fn interpret(source: &str) -> InterpretResult {
+        compiler::compile(source);
+
+        InterpretResult::Ok(None)
+    }
+
+    pub fn interpret_chunk(chunk: Chunk) -> InterpretResult {
         let vm = Self {
             chunk,
             ip: 0,
@@ -128,7 +134,7 @@ mod tests {
         chunk.write(OpCode::Negate, 123);
         chunk.write(OpCode::Return, 123);
 
-        let result = Vm::interpret(chunk);
+        let result = Vm::interpret_chunk(chunk);
         assert_eq!(InterpretResult::Ok(Some(-0.8214285714285714)), result);
     }
 
@@ -147,7 +153,7 @@ mod tests {
         chunk.write(OpCode::Add, 123);
         chunk.write(OpCode::Return, 123);
 
-        let result = Vm::interpret(chunk);
+        let result = Vm::interpret_chunk(chunk);
         assert_eq!(InterpretResult::Ok(Some(45.0)), result);
     }
 }
