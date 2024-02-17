@@ -8,7 +8,7 @@ mod scanner;
 mod value;
 mod vm;
 
-use crate::vm::Vm;
+use crate::{compiler::compile, vm::Vm};
 use std::{
     env, fs,
     io::{stdin, stdout, Write},
@@ -26,8 +26,11 @@ fn main() {
 
 fn run_file(path: &str) {
     let source = fs::read_to_string(path).unwrap();
-    let result = Vm::interpret(&source);
-    println!("{result:?}");
+    if let Some(chunk) = compile(&source) {
+        let mut vm = Vm::new();
+        let result = vm.interpret_chunk(chunk);
+        println!("{result:?}");
+    }
 }
 
 fn repl() {
@@ -35,10 +38,19 @@ fn repl() {
     print!("> ");
     stdout.flush().unwrap();
 
+    let mut vm = Vm::new();
+
     for line in stdin().lines() {
         let line = line.unwrap();
-        let result = Vm::interpret(&line);
-        println!("{result:?}");
+        match compile(&line) {
+            Some(chunk) => {
+                let result = vm.interpret_chunk(chunk);
+                println!("{result:?}");
+            }
+            None => {
+                println!("Could not compile");
+            }
+        }
 
         print!("> ");
         stdout.flush().unwrap();

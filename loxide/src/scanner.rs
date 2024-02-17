@@ -185,7 +185,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn is_at_end(&self) -> bool {
+    pub fn is_at_end(&self) -> bool {
         self.current >= self.source.len()
     }
 
@@ -251,7 +251,7 @@ impl<'a> Scanner<'a> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Token {
     pub token_type: TokenType,
     pub start: usize,

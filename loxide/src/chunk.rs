@@ -64,15 +64,10 @@ impl Chunk {
 
         let op_code = OpCode::from_byte(code).unwrap();
         let name = format!("{op_code}");
-        match op_code {
-            OpCode::Constant => {
-                offset += 1;
 
-                let index = self.code[offset];
-                let value = &self.constants[index as usize];
-                println!("{name:<16} {index} '{value:?}'");
-            }
-            OpCode::LongConstant => {
+        use OpCode::*;
+        match op_code {
+            LongConstant => {
                 let mut index_data = [0; 4];
                 index_data[0..3].copy_from_slice(&self.code[offset + 1..offset + 4]);
 
@@ -82,15 +77,22 @@ impl Chunk {
                 println!("{name:<16} {index} '{value:?}'");
 
                 offset += 3;
-                // let mut index_data = [0; 4];
-                // for i in 1..=3 {
-                //     code_iter.next()
-                // }
+            }
+            Constant | DefineGlobal | SetGlobal | GetGlobal => {
+                self.disassemble_constant_instruction(&name, &mut offset)
             }
             _ => println!("{name}"),
         }
         offset += 1;
         offset
+    }
+
+    fn disassemble_constant_instruction(&self, name: &str, offset: &mut usize) {
+        *offset += 1;
+
+        let index = self.code[*offset];
+        let value = &self.constants[index as usize];
+        println!("{name:<16} {index} '{value:?}'");
     }
 
     pub fn add_constant(&mut self, value: impl Into<Value>) -> usize {

@@ -1,29 +1,35 @@
-use crate::{chunk::Chunk, compiler, object::Object, op_code::OpCode, value::Value};
+use crate::{chunk::Chunk, object::Object, op_code::OpCode, value::Value};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    rc::Rc,
+};
 
 pub struct Vm {
     chunk: Chunk,
     ip: usize,
     stack: Vec<Value>,
+    globals: HashMap<Rc<str>, Value>,
 }
 
 impl Vm {
-    pub fn interpret(source: &str) -> InterpretResult {
-        match compiler::compile(source) {
-            Some(chunk) => Self::interpret_chunk(chunk),
-            None => Err(VmError::CompileError),
+    pub fn new() -> Self {
+        Self {
+            chunk: Chunk::default(),
+            ip: 0,
+            stack: Vec::new(),
+            globals: HashMap::new(),
         }
     }
 
-    pub fn interpret_chunk(chunk: Chunk) -> InterpretResult {
-        let vm = Self {
-            chunk,
-            ip: 0,
-            stack: Vec::new(),
-        };
-        vm.run()
+    pub fn interpret_chunk(&mut self, chunk: Chunk) -> InterpretResult {
+        self.stack.clear();
+        self.ip = 0;
+        self.chunk = chunk;
+
+        self.run()
     }
 
-    fn run(mut self) -> InterpretResult {
+    fn run(&mut self) -> InterpretResult {
         loop {
             #[cfg(feature = "trace")]
             {
@@ -45,11 +51,11 @@ impl Vm {
                     break InterpretResult::Ok(self.stack.pop());
                 }
                 Constant => {
-                    let value = self.load_constant();
+                    let value = self.read_constant();
                     self.stack.push(value);
                 }
                 LongConstant => {
-                    let value = self.load_long_constant();
+                    let value = self.read_long_constant();
                     self.stack.push(value);
                 }
                 Negate => match self.peek_mut(0) {
@@ -86,6 +92,39 @@ impl Vm {
                     let value = self.stack.pop().unwrap();
                     self.stack.push(value.is_falsey().into())
                 }
+                Print => {
+                    let value = self.stack.pop().unwrap();
+                    println!("{value:?}");
+                }
+                Pop => {
+                    self.stack.pop();
+                }
+                DefineGlobal => {
+                    let name = self.read_string();
+                    self.globals.insert(name, self.peek(0).clone());
+                    self.stack.pop();
+                }
+                GetGlobal => {
+                    let name = self.read_string();
+                    match self.globals.get(&name) {
+                        Some(value) => self.stack.push(value.clone()),
+                        None => self.runtime_error(&format!("Undefined variable {name}"))?,
+                    }
+                }
+                SetGlobal => {
+                    let name = self.read_string();
+
+                    match self.globals.entry(name) {
+                        Entry::Occupied(mut o) => {
+                            let value = self.stack.last().unwrap().clone();
+                            o.insert(value);
+                        }
+                        Entry::Vacant(v) => {
+                            let name = v.into_key();
+                            self.runtime_error(&format!("Undefined variable '{name}'"))?;
+                        }
+                    }
+                }
             }
         }
     }
@@ -110,18 +149,25 @@ impl Vm {
         data
     }
 
-    fn load_constant(&mut self) -> Value {
+    fn read_constant(&mut self) -> Value {
         let index = self.read_byte();
         self.chunk.constants[index as usize].clone()
     }
 
-    fn load_long_constant(&mut self) -> Value {
+    fn read_long_constant(&mut self) -> Value {
         let data = self.read_multi::<3>();
         let mut index_data = [0; 4];
         index_data[0..3].copy_from_slice(data);
 
         let index = u32::from_le_bytes(index_data);
         self.chunk.constants[index as usize].clone()
+    }
+
+    fn read_string(&mut self) -> Rc<str> {
+        match self.read_constant() {
+            Value::Object(Object::String(name)) => name,
+            _ => panic!("Global name should be a string"),
+        }
     }
 
     fn binary_op<V, Op>(&mut self, op: Op) -> Result<(), VmError>
@@ -156,7 +202,6 @@ pub type InterpretResult = Result<Option<Value>, VmError>;
 
 #[derive(Debug, PartialEq)]
 pub enum VmError {
-    CompileError,
     RuntimeError,
 }
 
@@ -188,7 +233,7 @@ mod tests {
         chunk.write(OpCode::Negate, 123);
         chunk.write(OpCode::Return, 123);
 
-        let result = Vm::interpret_chunk(chunk);
+        let result = Vm::new().interpret_chunk(chunk);
         assert_eq!(
             InterpretResult::Ok(Some(Value::Number(-0.821_428_571_428_571_4))),
             result
@@ -210,7 +255,7 @@ mod tests {
         chunk.write(OpCode::Add, 123);
         chunk.write(OpCode::Return, 123);
 
-        let result = Vm::interpret_chunk(chunk);
+        let result = Vm::new().interpret_chunk(chunk);
         assert_eq!(InterpretResult::Ok(Some(Value::Number(45.0))), result);
     }
 }

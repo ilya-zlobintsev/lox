@@ -15,4 +15,9 @@ convertable_enum! {
     Equal = 12,
     Greater = 13,
     Less = 14,
+    Print = 15,
+    Pop = 16,
+    DefineGlobal = 17,
+    GetGlobal = 18,
+    SetGlobal = 19,
 }
