@@ -8,4 +8,11 @@ convertable_enum! {
     Subtract = 5,
     Multiply = 6,
     Divide = 7,
+    Nil = 8,
+    True = 9,
+    False = 10,
+    Not = 11,
+    Equal = 12,
+    Greater = 13,
+    Less = 14,
 }

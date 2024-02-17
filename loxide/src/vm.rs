@@ -10,7 +10,7 @@ impl Vm {
     pub fn interpret(source: &str) -> InterpretResult {
         match compiler::compile(source) {
             Some(chunk) => Self::interpret_chunk(chunk),
-            None => InterpretResult::CompileError,
+            None => Err(VmError::CompileError),
         }
     }
 
@@ -29,7 +29,7 @@ impl Vm {
             {
                 print!("          ");
                 for slot in 0..self.stack.len() {
-                    print!("[ {} ]", self.stack[slot]);
+                    print!("[ {:?} ]", self.stack[slot]);
                 }
                 println!();
 
@@ -52,15 +52,38 @@ impl Vm {
                     let value = self.read_long_constant();
                     self.stack.push(value);
                 }
-                Negate => {
-                    *self.stack.last_mut().unwrap() *= -1.0;
+                Negate => match self.peek_mut(0).as_number_mut() {
+                    Some(value) => *value *= -1.0,
+                    None => self.runtime_error("Operand must be a number")?,
+                },
+                Add => self.binary_op(|a, b| a + b)?,
+                Subtract => self.binary_op(|a, b| a - b)?,
+                Multiply => self.binary_op(|a, b| a * b)?,
+                Divide => self.binary_op(|a, b| a / b)?,
+                Greater => self.binary_op(|a, b| a > b)?,
+                Less => self.binary_op(|a, b| a < b)?,
+                Equal => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push((a == b).into());
                 }
-                Add => self.binary_op(|a, b| a + b),
-                Subtract => self.binary_op(|a, b| a - b),
-                Multiply => self.binary_op(|a, b| a * b),
-                Divide => self.binary_op(|a, b| a / b),
+                Nil => self.stack.push(Value::Nil),
+                True => self.stack.push(true.into()),
+                False => self.stack.push(false.into()),
+                Not => {
+                    let value = self.stack.pop().unwrap();
+                    self.stack.push(value.is_falsey().into())
+                }
             }
         }
+    }
+
+    fn runtime_error(&self, message: &str) -> Result<(), VmError> {
+        eprintln!(
+            "[line {}] Error in script: {message}",
+            self.chunk.line_at(self.ip)
+        );
+        Err(VmError::RuntimeError)
     }
 
     fn read_byte(&mut self) -> u8 {
@@ -89,20 +112,38 @@ impl Vm {
         self.chunk.constants[index as usize]
     }
 
-    // fn reset_stack(&mut self) {
-    //     self.stack_top = 0;
-    // }
-
-    fn binary_op<Op: FnOnce(Value, Value) -> Value>(&mut self, op: Op) {
+    fn binary_op<V, Op>(&mut self, op: Op) -> Result<(), VmError>
+    where
+        V: Into<Value>,
+        Op: FnOnce(f64, f64) -> V,
+    {
         let b = self.stack.pop().unwrap();
         let a = self.stack.pop().unwrap();
-        self.stack.push(op(a, b));
+
+        match (a, b) {
+            (Value::Number(lhs), Value::Number(rhs)) => {
+                let result = op(lhs, rhs);
+                self.stack.push(result.into());
+                Ok(())
+            }
+            _ => self.runtime_error("Operands have invalid types"),
+        }
+    }
+
+    fn peek(&self, distance: usize) -> &Value {
+        &self.stack[self.stack.len() - 1 - distance]
+    }
+
+    fn peek_mut(&mut self, distance: usize) -> &mut Value {
+        let index = self.stack.len() - 1 - distance;
+        &mut self.stack[index]
     }
 }
 
+pub type InterpretResult = Result<Option<Value>, VmError>;
+
 #[derive(Debug, PartialEq)]
-pub enum InterpretResult {
-    Ok(Option<Value>),
+pub enum VmError {
     CompileError,
     RuntimeError,
 }
@@ -110,7 +151,7 @@ pub enum InterpretResult {
 #[cfg(test)]
 mod tests {
     use super::Vm;
-    use crate::{chunk::Chunk, op_code::OpCode, vm::InterpretResult};
+    use crate::{chunk::Chunk, op_code::OpCode, value::Value, vm::InterpretResult};
 
     #[test]
     fn basic_math() {
@@ -136,7 +177,10 @@ mod tests {
         chunk.write(OpCode::Return, 123);
 
         let result = Vm::interpret_chunk(chunk);
-        assert_eq!(InterpretResult::Ok(Some(-0.8214285714285714)), result);
+        assert_eq!(
+            InterpretResult::Ok(Some(Value::Number(-0.821_428_571_428_571_4))),
+            result
+        );
     }
 
     #[test]
@@ -155,6 +199,6 @@ mod tests {
         chunk.write(OpCode::Return, 123);
 
         let result = Vm::interpret_chunk(chunk);
-        assert_eq!(InterpretResult::Ok(Some(45.0)), result);
+        assert_eq!(InterpretResult::Ok(Some(Value::Number(45.0))), result);
     }
 }

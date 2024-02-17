@@ -92,7 +92,7 @@ impl<'a> Compiler<'a> {
     fn number(&mut self) {
         let lexeme = self.parser.scanner.lexeme(self.parser.previous.unwrap());
         match lexeme.parse::<f64>() {
-            Ok(value) => self.emit_constant(value),
+            Ok(value) => self.emit_constant(Value::Number(value)),
             Err(_) => self.parser.error("Could not parse number"),
         }
     }
@@ -102,8 +102,10 @@ impl<'a> Compiler<'a> {
 
         self.parse_presedence(Precedence::Unary);
 
-        if let TokenType::Minus = operator_type {
-            self.emit_byte(OpCode::Negate)
+        match operator_type {
+            TokenType::Minus => self.emit_byte(OpCode::Negate),
+            TokenType::Bang => self.emit_byte(OpCode::Not),
+            _ => (),
         }
     }
 
@@ -117,6 +119,12 @@ impl<'a> Compiler<'a> {
             TokenType::Minus => self.emit_byte(OpCode::Subtract),
             TokenType::Star => self.emit_byte(OpCode::Multiply),
             TokenType::Slash => self.emit_byte(OpCode::Divide),
+            TokenType::BangEqual => self.emit_bytes(OpCode::Equal, OpCode::Not),
+            TokenType::EqualEqual => self.emit_byte(OpCode::Equal),
+            TokenType::Greater => self.emit_byte(OpCode::Greater),
+            TokenType::GreaterEqual => self.emit_bytes(OpCode::Less, OpCode::Not),
+            TokenType::Less => self.emit_byte(OpCode::Less),
+            TokenType::LessEqual => self.emit_bytes(OpCode::Greater, OpCode::Not),
             _ => (),
         }
     }
@@ -125,6 +133,15 @@ impl<'a> Compiler<'a> {
         self.expression();
         self.parser
             .consume(TokenType::RightParen, "Expected a ')' after expression");
+    }
+
+    fn literal(&mut self) {
+        match self.previous_token_type() {
+            TokenType::False => self.emit_byte(OpCode::False),
+            TokenType::True => self.emit_byte(OpCode::True),
+            TokenType::Nil => self.emit_byte(OpCode::Nil),
+            _ => (),
+        }
     }
 
     fn parse_presedence(&mut self, precedence: Precedence) {
@@ -152,6 +169,16 @@ impl<'a> Compiler<'a> {
             Slash => ParseRule::new(None, Some(Self::binary), Precedence::Factor),
             Star => ParseRule::new(None, Some(Self::binary), Precedence::Factor),
             Number => ParseRule::new(Some(Self::number), None, Precedence::None),
+            False => ParseRule::new(Some(Self::literal), None, Precedence::None),
+            True => ParseRule::new(Some(Self::literal), None, Precedence::None),
+            Nil => ParseRule::new(Some(Self::literal), None, Precedence::None),
+            Bang => ParseRule::new(Some(Self::unary), None, Precedence::None),
+            BangEqual => ParseRule::new(None, Some(Self::binary), Precedence::Equality),
+            EqualEqual => ParseRule::new(None, Some(Self::binary), Precedence::Equality),
+            Greater => ParseRule::new(None, Some(Self::binary), Precedence::Comparison),
+            GreaterEqual => ParseRule::new(None, Some(Self::binary), Precedence::Comparison),
+            Less => ParseRule::new(None, Some(Self::binary), Precedence::Comparison),
+            LessEqual => ParseRule::new(None, Some(Self::binary), Precedence::Comparison),
             _ => ParseRule::new(None, None, Precedence::None),
         }
     }

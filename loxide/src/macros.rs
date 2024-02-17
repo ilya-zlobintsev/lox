@@ -4,17 +4,13 @@ macro_rules! convertable_enum {
         #[derive(Debug, Clone, Copy)]
         pub enum $enum {
             $(
-                $name,
+                $name = $value,
             )+
         }
 
         impl $enum {
             pub fn as_byte(&self) -> u8 {
-                match self {
-                    $(
-                        $enum::$name => $value,
-                    )+
-                }
+                *self as u8
             }
 
             pub fn from_byte(byte: u8) -> Option<Self> {

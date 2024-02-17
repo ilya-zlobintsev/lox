@@ -93,12 +93,12 @@ impl Chunk {
         offset
     }
 
-    pub fn add_constant(&mut self, value: Value) -> usize {
-        self.constants.push(value);
+    pub fn add_constant(&mut self, value: impl Into<Value>) -> usize {
+        self.constants.push(value.into());
         self.constants.len() - 1
     }
 
-    fn line_at(&self, offset: usize) -> u32 {
+    pub fn line_at(&self, offset: usize) -> u32 {
         for (i, info) in self.lines.iter().enumerate() {
             if info.start_offset > offset {
                 return self.lines[i - 1].line;
