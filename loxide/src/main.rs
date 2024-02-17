@@ -2,6 +2,7 @@ mod chunk;
 #[macro_use]
 mod macros;
 mod compiler;
+mod object;
 mod op_code;
 mod scanner;
 mod value;

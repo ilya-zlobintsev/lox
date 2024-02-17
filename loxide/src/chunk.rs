@@ -77,7 +77,7 @@ impl Chunk {
                 index_data[0..3].copy_from_slice(&self.code[offset + 1..offset + 4]);
 
                 let index = u32::from_le_bytes(index_data);
-                let value = self.constants[index as usize];
+                let value = &self.constants[index as usize];
 
                 println!("{name:<16} {index} '{value:?}'");
 

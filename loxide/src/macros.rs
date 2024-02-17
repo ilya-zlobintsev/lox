@@ -58,3 +58,27 @@ macro_rules! convertable_enum {
         }
     };
 }
+
+macro_rules! impl_enum_conversions {
+    ($enum:ident, $($variant:ident, $type:ty,)+) => {
+        $(
+        impl From<$type> for $enum {
+            fn from(value: $type) -> Self {
+                Self::$variant(value)
+            }
+        }
+
+        impl TryFrom<$enum> for $type {
+            type Error = &'static str;
+
+            fn try_from(value: $enum) -> Result<Self, Self::Error> {
+                #[allow(unreachable_patterns)]
+                match value {
+                    $enum::$variant(value) => Ok(value),
+                    _ => Err(concat!("Value is not a ", stringify!($variant))),
+                }
+            }
+        }
+        )+
+    };
+}

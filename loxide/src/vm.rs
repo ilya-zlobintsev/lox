@@ -1,4 +1,4 @@
-use crate::{chunk::Chunk, compiler, op_code::OpCode, value::Value};
+use crate::{chunk::Chunk, compiler, object::Object, op_code::OpCode, value::Value};
 
 pub struct Vm {
     chunk: Chunk,
@@ -45,18 +45,30 @@ impl Vm {
                     break InterpretResult::Ok(self.stack.pop());
                 }
                 Constant => {
-                    let value = self.read_constant();
+                    let value = self.load_constant();
                     self.stack.push(value);
                 }
                 LongConstant => {
-                    let value = self.read_long_constant();
+                    let value = self.load_long_constant();
                     self.stack.push(value);
                 }
-                Negate => match self.peek_mut(0).as_number_mut() {
-                    Some(value) => *value *= -1.0,
-                    None => self.runtime_error("Operand must be a number")?,
+                Negate => match self.peek_mut(0) {
+                    Value::Number(value) => *value *= -1.0,
+                    Value::Object(Object::String(str)) => {
+                        let reversed: String = str.chars().rev().collect();
+                        *str = reversed.into();
+                    }
+                    _ => self.runtime_error("Operand must be a number or a string")?,
                 },
-                Add => self.binary_op(|a, b| a + b)?,
+                Add => match (self.peek(0), self.peek(1)) {
+                    (Value::Object(Object::String(_)), Value::Object(Object::String(_))) => {
+                        let b = self.stack.pop().unwrap();
+                        let a = self.stack.pop().unwrap();
+                        let new_value = format!("{}{}", a.as_str().unwrap(), b.as_str().unwrap());
+                        self.stack.push(Value::new_string(new_value));
+                    }
+                    _ => self.binary_op(|a, b| a + b)?,
+                },
                 Subtract => self.binary_op(|a, b| a - b)?,
                 Multiply => self.binary_op(|a, b| a * b)?,
                 Divide => self.binary_op(|a, b| a / b)?,
@@ -98,18 +110,18 @@ impl Vm {
         data
     }
 
-    fn read_constant(&mut self) -> Value {
+    fn load_constant(&mut self) -> Value {
         let index = self.read_byte();
-        self.chunk.constants[index as usize]
+        self.chunk.constants[index as usize].clone()
     }
 
-    fn read_long_constant(&mut self) -> Value {
+    fn load_long_constant(&mut self) -> Value {
         let data = self.read_multi::<3>();
         let mut index_data = [0; 4];
         index_data[0..3].copy_from_slice(data);
 
         let index = u32::from_le_bytes(index_data);
-        self.chunk.constants[index as usize]
+        self.chunk.constants[index as usize].clone()
     }
 
     fn binary_op<V, Op>(&mut self, op: Op) -> Result<(), VmError>

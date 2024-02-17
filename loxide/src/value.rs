@@ -1,7 +1,12 @@
-#[derive(Debug, PartialEq, Clone, Copy)]
+use std::rc::Rc;
+
+use crate::object::Object;
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     Number(f64),
     Boolean(bool),
+    Object(Object),
     Nil,
 }
 
@@ -42,30 +47,23 @@ impl Value {
             _ => false,
         }
     }
+
+    pub fn as_str(&self) -> Option<&str> {
+        if let Self::Object(Object::String(str)) = self {
+            Some(str)
+        } else {
+            None
+        }
+    }
+
+    pub fn new_string(value: impl Into<Rc<str>>) -> Self {
+        Self::Object(Object::String(value.into()))
+    }
 }
 
-macro_rules! impl_conversions {
-    ($($variant:ident, $type:ty,)+) => {
-        $(
-
-        impl From<$type> for Value {
-            fn from(value: $type) -> Self {
-                Self::$variant(value)
-            }
-        }
-
-        impl TryFrom<Value> for $type {
-            type Error = &'static str;
-
-            fn try_from(value: Value) -> Result<Self, Self::Error> {
-                match value {
-                    Value::$variant(value) => Ok(value),
-                    _ => Err(concat!("Value is not a ", stringify!($variant))),
-                }
-            }
-        }
-        )+
-    };
+impl_enum_conversions! {
+    Value,
+    Boolean, bool,
+    Number, f64,
+    Object, Object,
 }
-
-impl_conversions!(Boolean, bool, Number, f64,);

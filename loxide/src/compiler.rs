@@ -1,11 +1,10 @@
-use std::ops::Range;
-
 use crate::{
     chunk::Chunk,
     op_code::OpCode,
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
+use std::ops::Range;
 
 pub fn compile(source: &str) -> Option<Chunk> {
     let scanner = Scanner::new(source);
@@ -144,6 +143,12 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn string(&mut self) {
+        let previous_token = self.parser.previous.unwrap();
+        let value = &self.parser.scanner.source[previous_token.start + 1..previous_token.end - 1];
+        self.emit_constant(Value::new_string(value));
+    }
+
     fn parse_presedence(&mut self, precedence: Precedence) {
         self.parser.advance();
         let prefix_rule = self.get_rule(self.previous_token_type());
@@ -179,6 +184,7 @@ impl<'a> Compiler<'a> {
             GreaterEqual => ParseRule::new(None, Some(Self::binary), Precedence::Comparison),
             Less => ParseRule::new(None, Some(Self::binary), Precedence::Comparison),
             LessEqual => ParseRule::new(None, Some(Self::binary), Precedence::Comparison),
+            String => ParseRule::new(Some(Self::string), None, Precedence::None),
             _ => ParseRule::new(None, None, Precedence::None),
         }
     }
