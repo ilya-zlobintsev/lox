@@ -1,4 +1,4 @@
-use crate::{chunk::Chunk, compiler, op_code::OpCode, scanner::Scanner, value::Value};
+use crate::{chunk::Chunk, compiler, op_code::OpCode, value::Value};
 
 pub struct Vm {
     chunk: Chunk,
@@ -8,9 +8,10 @@ pub struct Vm {
 
 impl Vm {
     pub fn interpret(source: &str) -> InterpretResult {
-        compiler::compile(source);
-
-        InterpretResult::Ok(None)
+        match compiler::compile(source) {
+            Some(chunk) => Self::interpret_chunk(chunk),
+            None => InterpretResult::CompileError,
+        }
     }
 
     pub fn interpret_chunk(chunk: Chunk) -> InterpretResult {

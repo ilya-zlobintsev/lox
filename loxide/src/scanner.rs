@@ -1,6 +1,6 @@
 #[derive(Debug)]
 pub struct Scanner<'a> {
-    source: &'a str,
+    pub source: &'a str,
     start: usize,
     current: usize,
     line: u32,
@@ -27,49 +27,6 @@ impl<'a> Scanner<'a> {
             let c = self.advance();
 
             let token_type = match c {
-                /*'(' => self.make_token(TokenType::LeftParen),
-                ')' => self.make_token(TokenType::RightParen),
-                '{' => self.make_token(TokenType::LeftBrace),
-                '}' => self.make_token(TokenType::RightBrace),
-                ';' => self.make_token(TokenType::Semicolon),
-                ',' => self.make_token(TokenType::Comma),
-                '.' => self.make_token(TokenType::Dot),
-                '-' => self.make_token(TokenType::Minus),
-                '+' => self.make_token(TokenType::Plus),
-                '/' => self.make_token(TokenType::Slash),
-                '*' => self.make_token(TokenType::Star),
-                '!' => {
-                    let token_type = if self.current_matches('=') {
-                        TokenType::BangEqual
-                    } else {
-                        TokenType::Bang
-                    };
-                    self.make_token(token_type)
-                }
-                '=' => {
-                    let token_type = if self.current_matches('=') {
-                        TokenType::EqualEqual
-                    } else {
-                        TokenType::Equal
-                    };
-                    self.make_token(token_type)
-                }
-                '<' => {
-                    let token_type = if self.current_matches('=') {
-                        TokenType::LessEqual
-                    } else {
-                        TokenType::Less
-                    };
-                    self.make_token(token_type)
-                }
-                '>' => {
-                    let token_type = if self.current_matches('=') {
-                        TokenType::GreaterEqual
-                    } else {
-                        TokenType::Greater
-                    };
-                    self.make_token(token_type)
-                }*/
                 '(' => TokenType::LeftParen,
                 ')' => TokenType::RightParen,
                 '{' => TokenType::LeftBrace,
@@ -223,6 +180,8 @@ impl<'a> Scanner<'a> {
         ScannerError {
             message,
             line: self.line,
+            start: self.start,
+            end: self.current,
         }
     }
 
@@ -286,8 +245,13 @@ impl<'a> Scanner<'a> {
         self.current += 1;
         true
     }
+
+    pub fn lexeme(&self, token: Token) -> &str {
+        &self.source[token.start..token.end]
+    }
 }
 
+#[derive(Clone, Copy)]
 pub struct Token {
     pub token_type: TokenType,
     pub start: usize,
@@ -346,6 +310,8 @@ pub enum TokenType {
 pub struct ScannerError {
     pub message: String,
     pub line: u32,
+    pub start: usize,
+    pub end: usize,
 }
 
 #[cfg(test)]
