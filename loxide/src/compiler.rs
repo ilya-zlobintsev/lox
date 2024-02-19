@@ -20,6 +20,8 @@ pub fn compile(source: &str) -> Option<Chunk> {
     let mut compiler = Compiler {
         compiling_chunk: Chunk::default(),
         parser,
+        locals: Vec::new(),
+        scope_depth: 0,
     };
 
     compiler.parser.advance();
@@ -38,6 +40,13 @@ pub fn compile(source: &str) -> Option<Chunk> {
 struct Compiler<'src> {
     compiling_chunk: Chunk,
     parser: Parser<'src>,
+    locals: Vec<Local>,
+    scope_depth: i32,
+}
+
+struct Local {
+    name: Token,
+    depth: i32,
 }
 
 impl<'src> Compiler<'src> {
@@ -136,12 +145,54 @@ impl<'src> Compiler<'src> {
     }
 
     fn define_variable(&mut self, var_index: u8) {
-        self.emit_bytes(OpCode::DefineGlobal, var_index);
+        if self.scope_depth == 0 {
+            self.emit_bytes(OpCode::DefineGlobal, var_index);
+        } else {
+            self.mark_initialized();
+        }
+    }
+
+    fn mark_initialized(&mut self) {
+        self.locals.last_mut().unwrap().depth = self.scope_depth;
+    }
+
+    fn declare_variable(&mut self) {
+        if self.scope_depth != 0 {
+            let name = self.parser.previous.unwrap();
+
+            for local in self.locals.iter().rev() {
+                if local.depth != -1 && local.depth < self.scope_depth {
+                    break;
+                }
+
+                if self.identifiers_eq(name, local.name) {
+                    self.parser
+                        .error("Variable with this name already exists in the current scope");
+                }
+            }
+
+            self.add_local(name);
+        }
+    }
+
+    fn identifiers_eq(&self, a: Token, b: Token) -> bool {
+        self.parser.scanner.source[a.start..a.end] == self.parser.scanner.source[b.start..b.end]
+    }
+
+    fn add_local(&mut self, name: Token) {
+        let local = Local { name, depth: -1 };
+        self.locals.push(local);
     }
 
     fn parse_variable(&mut self, message: &str) -> u8 {
         self.parser.consume(TokenType::Identifier, message);
-        self.identifier_constant(self.parser.previous.unwrap())
+
+        self.declare_variable();
+        if self.scope_depth > 0 {
+            0
+        } else {
+            self.identifier_constant(self.parser.previous.unwrap())
+        }
     }
 
     fn identifier_constant(&mut self, name: Token) -> u8 {
@@ -152,8 +203,38 @@ impl<'src> Compiler<'src> {
     fn statement(&mut self) {
         if self.match_token(TokenType::Print) {
             self.print_statement();
+        } else if self.match_token(TokenType::LeftBrace) {
+            self.begin_scope();
+            self.block();
+            self.end_scope();
         } else {
             self.expression_statement();
+        }
+    }
+
+    fn block(&mut self) {
+        while !self.is_at_end() && !self.check_current_token(TokenType::RightBrace) {
+            self.declaration();
+        }
+
+        self.parser
+            .consume(TokenType::RightBrace, "Exepected a '}' after block");
+    }
+
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        self.scope_depth -= 1;
+
+        while self
+            .locals
+            .last()
+            .is_some_and(|top_var| top_var.depth > self.scope_depth)
+        {
+            self.locals.pop().unwrap();
+            self.emit_byte(OpCode::Pop);
         }
     }
 
@@ -236,14 +317,35 @@ impl<'src> Compiler<'src> {
         self.named_variable(self.parser.previous.unwrap(), can_assign);
     }
 
+    fn resolve_local(&mut self, name: Token) -> Option<u8> {
+        self.locals
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, local)| self.identifiers_eq(name, local.name))
+            .map(|(i, local)| {
+                if local.depth == -1 {
+                    self.parser
+                        .error("Cannot read local variable in its own initializer");
+                }
+                i as u8
+            })
+    }
+
     fn named_variable(&mut self, name: Token, can_assign: bool) {
-        let arg = self.identifier_constant(name);
+        let (get_op, set_op, arg) = match self.resolve_local(name) {
+            None => {
+                let arg = self.identifier_constant(name);
+                (OpCode::GetGlobal, OpCode::SetGlobal, arg)
+            }
+            Some(local) => (OpCode::GetLocal, OpCode::SetLocal, local),
+        };
 
         if can_assign && self.match_token(TokenType::Equal) {
             self.expression();
-            self.emit_bytes(OpCode::SetGlobal, arg);
+            self.emit_bytes(set_op, arg);
         } else {
-            self.emit_bytes(OpCode::GetGlobal, arg);
+            self.emit_bytes(get_op, arg);
         }
     }
 
@@ -319,6 +421,10 @@ impl<'src> Compiler<'src> {
 
             self.parser.advance();
         }
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.parser.scanner.is_at_end()
     }
 }
 

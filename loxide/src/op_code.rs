@@ -20,4 +20,6 @@ convertable_enum! {
     DefineGlobal = 17,
     GetGlobal = 18,
     SetGlobal = 19,
+    GetLocal = 20,
+    SetLocal = 21,
 }

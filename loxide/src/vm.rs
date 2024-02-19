@@ -4,6 +4,8 @@ use std::{
     rc::Rc,
 };
 
+const INITIAL_STACK_SIZE: usize = 256;
+
 pub struct Vm {
     chunk: Chunk,
     ip: usize,
@@ -16,13 +18,14 @@ impl Vm {
         Self {
             chunk: Chunk::default(),
             ip: 0,
-            stack: Vec::new(),
+            stack: Vec::with_capacity(INITIAL_STACK_SIZE),
             globals: HashMap::new(),
         }
     }
 
     pub fn interpret_chunk(&mut self, chunk: Chunk) -> InterpretResult {
         self.stack.clear();
+        self.stack.shrink_to(INITIAL_STACK_SIZE);
         self.ip = 0;
         self.chunk = chunk;
 
@@ -124,6 +127,15 @@ impl Vm {
                             self.runtime_error(&format!("Undefined variable '{name}'"))?;
                         }
                     }
+                }
+                GetLocal => {
+                    let slot = self.read_byte();
+                    let value = self.stack[slot as usize].clone();
+                    self.stack.push(value);
+                }
+                SetLocal => {
+                    let slot = self.read_byte();
+                    self.stack[slot as usize] = self.peek(0).clone();
                 }
             }
         }

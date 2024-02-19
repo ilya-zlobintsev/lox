@@ -79,20 +79,25 @@ impl Chunk {
                 offset += 3;
             }
             Constant | DefineGlobal | SetGlobal | GetGlobal => {
-                self.disassemble_constant_instruction(&name, &mut offset)
+                let this = &self;
+                let name: &str = &name;
+                let offset: &mut usize = &mut offset;
+                *offset += 1;
+
+                let index = this.code[*offset];
+                let value = &this.constants[index as usize];
+                println!("{name:<16} {index} '{value:?}'");
+            }
+            GetLocal | SetLocal => {
+                offset += 1;
+
+                let slot = self.code[offset];
+                println!("{name:<16} {slot:04}");
             }
             _ => println!("{name}"),
         }
         offset += 1;
         offset
-    }
-
-    fn disassemble_constant_instruction(&self, name: &str, offset: &mut usize) {
-        *offset += 1;
-
-        let index = self.code[*offset];
-        let value = &self.constants[index as usize];
-        println!("{name:<16} {index} '{value:?}'");
     }
 
     pub fn add_constant(&mut self, value: impl Into<Value>) -> usize {
