@@ -1,4 +1,4 @@
-use crate::{op_code::OpCode, value::Value};
+use crate::value::Value;
 
 #[derive(Default, Debug)]
 pub struct Chunk {
@@ -38,6 +38,7 @@ impl Chunk {
         }
     }
 
+    #[cfg(feature = "print")]
     pub fn disassemble(&self, name: &str) {
         println!("== {name} ==");
 
@@ -51,7 +52,10 @@ impl Chunk {
         println!("=========");
     }
 
+    #[cfg(any(feature = "print", feature = "trace"))]
     pub fn disassemble_instruction(&self, mut offset: usize) -> usize {
+        use crate::op_code::OpCode;
+
         let code = self.code[offset];
 
         print!("{offset:04} ");
