@@ -137,6 +137,20 @@ impl Vm {
                     let slot = self.read_byte();
                     self.stack[slot as usize] = self.peek(0).clone();
                 }
+                JumpIfFalse => {
+                    let offset = self.read_u16();
+                    if self.peek(0).is_falsey() {
+                        self.ip += offset as usize;
+                    }
+                }
+                Jump => {
+                    let offset = self.read_u16();
+                    self.ip += offset as usize;
+                }
+                Loop => {
+                    let offset = self.read_u16();
+                    self.ip -= offset as usize;
+                }
             }
         }
     }
@@ -180,6 +194,11 @@ impl Vm {
             Value::Object(Object::String(name)) => name,
             _ => panic!("Global name should be a string"),
         }
+    }
+
+    fn read_u16(&mut self) -> u16 {
+        let data = self.read_multi::<2>();
+        u16::from_ne_bytes(data.try_into().unwrap())
     }
 
     fn binary_op<V, Op>(&mut self, op: Op) -> Result<(), VmError>

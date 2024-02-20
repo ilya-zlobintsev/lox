@@ -22,4 +22,7 @@ convertable_enum! {
     SetGlobal = 19,
     GetLocal = 20,
     SetLocal = 21,
+    JumpIfFalse = 22,
+    Jump = 23,
+    Loop = 24,
 }

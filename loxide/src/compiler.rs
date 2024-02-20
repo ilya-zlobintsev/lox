@@ -69,6 +69,13 @@ impl<'src> Compiler<'src> {
         self.emit_byte(OpCode::Return.as_byte());
     }
 
+    fn emit_jump(&mut self, op_code: OpCode) -> usize {
+        self.emit_byte(op_code);
+        self.emit_byte(0xff);
+        self.emit_byte(0xff);
+        self.current_chunk().code.len() - 2
+    }
+
     fn emit_constant(&mut self, value: Value) {
         let index = self.make_constant(value);
         self.emit_bytes(OpCode::Constant, index);
@@ -203,6 +210,12 @@ impl<'src> Compiler<'src> {
     fn statement(&mut self) {
         if self.match_token(TokenType::Print) {
             self.print_statement();
+        } else if self.match_token(TokenType::If) {
+            self.if_statement();
+        } else if self.match_token(TokenType::While) {
+            self.while_statement();
+        } else if self.match_token(TokenType::For) {
+            self.for_statement();
         } else if self.match_token(TokenType::LeftBrace) {
             self.begin_scope();
             self.block();
@@ -210,6 +223,121 @@ impl<'src> Compiler<'src> {
         } else {
             self.expression_statement();
         }
+    }
+
+    fn for_statement(&mut self) {
+        self.begin_scope();
+
+        self.parser
+            .consume(TokenType::LeftParen, "Expected '(' after 'for'");
+
+        if !self.match_token(TokenType::Semicolon) {
+            if self.match_token(TokenType::Var) {
+                self.var_declaration()
+            } else {
+                self.expression_statement();
+            }
+        }
+
+        let mut loop_start = self.current_chunk().code.len();
+        let mut exit_jump = None;
+
+        if !self.match_token(TokenType::Semicolon) {
+            self.expression();
+            self.parser
+                .consume(TokenType::Semicolon, "Expected a ';' after for condition");
+
+            exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse));
+            self.emit_byte(OpCode::Pop);
+        }
+
+        if !self.match_token(TokenType::RightParen) {
+            let body_jump = self.emit_jump(OpCode::Jump);
+            let increment_start = self.current_chunk().code.len();
+
+            self.expression();
+            self.emit_byte(OpCode::Pop);
+
+            self.parser
+                .consume(TokenType::RightParen, "Expected ')' after for clause");
+
+            self.emit_loop(loop_start);
+            loop_start = increment_start;
+            self.patch_jump(body_jump);
+        }
+
+        self.statement();
+        self.emit_loop(loop_start);
+
+        if let Some(exit_jump) = exit_jump {
+            self.patch_jump(exit_jump);
+            self.emit_byte(OpCode::Pop);
+        }
+
+        self.end_scope();
+    }
+
+    fn while_statement(&mut self) {
+        let loop_start = self.current_chunk().code.len();
+
+        self.parser
+            .consume(TokenType::LeftParen, "Expected a '(' after 'while'");
+        self.expression();
+        self.parser
+            .consume(TokenType::RightParen, "Expected a ')' after condition");
+
+        let exit_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_byte(OpCode::Pop);
+        self.statement();
+        self.emit_loop(loop_start);
+
+        self.patch_jump(exit_jump);
+        self.emit_byte(OpCode::Pop);
+    }
+
+    fn if_statement(&mut self) {
+        self.parser
+            .consume(TokenType::LeftParen, "Expected '(' after 'if'");
+        self.expression();
+        self.parser
+            .consume(TokenType::RightParen, "Expected ')' after 'condition'");
+
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_byte(OpCode::Pop);
+        self.statement();
+
+        let else_jump = self.emit_jump(OpCode::Jump);
+        self.emit_byte(OpCode::Pop);
+        self.patch_jump(then_jump);
+
+        if self.match_token(TokenType::Else) {
+            self.statement();
+        }
+        self.patch_jump(else_jump);
+    }
+
+    fn patch_jump(&mut self, offset: usize) {
+        let jump = self.current_chunk().code.len() - offset - 2;
+
+        if jump > u16::MAX as usize {
+            self.parser.error("Jump is too long");
+        }
+
+        let [a, b] = (jump as u16).to_ne_bytes();
+        self.current_chunk().code[offset] = a;
+        self.current_chunk().code[offset + 1] = b;
+    }
+
+    fn emit_loop(&mut self, loop_start: usize) {
+        self.emit_byte(OpCode::Loop);
+
+        let offset = self.current_chunk().code.len() - loop_start + 2;
+        if offset > u16::MAX as usize {
+            self.parser.error("Loop body is too big");
+        }
+
+        let [a, b] = (offset as u16).to_ne_bytes();
+        self.emit_bytes(a, b);
     }
 
     fn block(&mut self) {
@@ -349,6 +477,24 @@ impl<'src> Compiler<'src> {
         }
     }
 
+    fn and(&mut self, _can_assign: bool) {
+        let end_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_byte(OpCode::Pop);
+        self.parse_presedence(Precedence::And);
+        self.patch_jump(end_jump);
+    }
+
+    fn or(&mut self, _can_assign: bool) {
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse);
+        let end_jump = self.emit_jump(OpCode::Jump);
+
+        self.patch_jump(else_jump);
+        self.emit_byte(OpCode::Pop);
+
+        self.parse_presedence(Precedence::Or);
+        self.patch_jump(end_jump);
+    }
+
     fn parse_presedence(&mut self, precedence: Precedence) {
         self.parser.advance();
         let prefix_rule = self.get_rule(self.previous_token_type());
@@ -393,6 +539,8 @@ impl<'src> Compiler<'src> {
             LessEqual => ParseRule::new(None, Some(Self::binary), Precedence::Comparison),
             String => ParseRule::new(Some(Self::string), None, Precedence::None),
             Identifier => ParseRule::new(Some(Self::variable), None, Precedence::None),
+            And => ParseRule::new(None, Some(Self::and), Precedence::And),
+            Or => ParseRule::new(None, Some(Self::or), Precedence::Or),
             _ => ParseRule::new(None, None, Precedence::None),
         }
     }

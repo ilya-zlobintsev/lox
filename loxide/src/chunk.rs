@@ -98,6 +98,13 @@ impl Chunk {
                 let slot = self.code[offset];
                 println!("{name:<16} {slot:04}");
             }
+            Jump | JumpIfFalse => {
+                let jump =
+                    u16::from_ne_bytes(self.code[offset + 1..offset + 3].try_into().unwrap());
+                println!("{name:<16} {jump:04}");
+
+                offset += 2;
+            }
             _ => println!("{name}"),
         }
         offset += 1;
