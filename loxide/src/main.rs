@@ -26,10 +26,13 @@ fn main() {
 
 fn run_file(path: &str) {
     let source = fs::read_to_string(path).unwrap();
-    if let Some(chunk) = compile(&source) {
+    if let Some(function) = compile(&source) {
         let mut vm = Vm::new();
-        let result = vm.interpret_chunk(chunk);
-        println!("{result:?}");
+        if let Err(err) = vm.interpret(function) {
+            eprintln!("VM error: {err:?}");
+        }
+    } else {
+        eprintln!("Could not compile");
     }
 }
 
@@ -43,12 +46,13 @@ fn repl() {
     for line in stdin().lines() {
         let line = line.unwrap();
         match compile(&line) {
-            Some(chunk) => {
-                let result = vm.interpret_chunk(chunk);
-                println!("{result:?}");
+            Some(function) => {
+                if let Err(err) = vm.interpret(function) {
+                    eprintln!("VM error: {err:?}");
+                }
             }
             None => {
-                println!("Could not compile");
+                eprintln!("Could not compile");
             }
         }
 

@@ -1,33 +1,55 @@
-use crate::{chunk::Chunk, object::Object, op_code::OpCode, value::Value};
+use crate::{
+    object::{FunctionObject, Object},
+    op_code::OpCode,
+    value::Value,
+};
 use std::{
     collections::{hash_map::Entry, HashMap},
     rc::Rc,
 };
 
 const INITIAL_STACK_SIZE: usize = 256;
+const FRAMES_MAX: usize = 64;
 
 pub struct Vm {
-    chunk: Chunk,
-    ip: usize,
+    frames: [CallFrame; FRAMES_MAX],
+    frame_count: usize,
     stack: Vec<Value>,
     globals: HashMap<Rc<str>, Value>,
+}
+
+#[derive(Default)]
+struct CallFrame {
+    function: FunctionObject,
+    ip: usize,
+    // slots: Vec<Value>,
+    stack_offset: usize,
 }
 
 impl Vm {
     pub fn new() -> Self {
         Self {
-            chunk: Chunk::default(),
-            ip: 0,
             stack: Vec::with_capacity(INITIAL_STACK_SIZE),
             globals: HashMap::new(),
+            frames: std::array::from_fn(|_| CallFrame::default()),
+            frame_count: 0,
         }
     }
 
-    pub fn interpret_chunk(&mut self, chunk: Chunk) -> InterpretResult {
+    pub fn interpret(&mut self, function: FunctionObject) -> InterpretResult {
         self.stack.clear();
         self.stack.shrink_to(INITIAL_STACK_SIZE);
-        self.ip = 0;
-        self.chunk = chunk;
+
+        self.stack
+            .push(Value::Object(Object::Function(function.clone())));
+
+        let frame = CallFrame {
+            function,
+            ip: 0,
+            stack_offset: 0,
+        };
+        self.frames[self.frame_count] = frame;
+        self.frame_count += 1;
 
         self.run()
     }
@@ -42,7 +64,11 @@ impl Vm {
                 }
                 println!();
 
-                self.chunk.disassemble_instruction(self.ip);
+                let current_frame = self.current_frame();
+                current_frame
+                    .function
+                    .chunk
+                    .disassemble_instruction(current_frame.ip);
             }
 
             let byte = self.read_byte();
@@ -129,55 +155,63 @@ impl Vm {
                     }
                 }
                 GetLocal => {
-                    let slot = self.read_byte();
-                    let value = self.stack[slot as usize].clone();
+                    let slot = self.read_byte() as usize + self.current_frame().stack_offset;
+                    let value = self.stack[slot].clone();
                     self.stack.push(value);
                 }
                 SetLocal => {
-                    let slot = self.read_byte();
-                    self.stack[slot as usize] = self.peek(0).clone();
+                    let slot = self.read_byte() as usize + self.current_frame().stack_offset;
+                    self.stack[slot] = self.peek(0).clone();
                 }
                 JumpIfFalse => {
                     let offset = self.read_u16();
                     if self.peek(0).is_falsey() {
-                        self.ip += offset as usize;
+                        self.current_frame().ip += offset as usize;
                     }
                 }
                 Jump => {
                     let offset = self.read_u16();
-                    self.ip += offset as usize;
+                    self.current_frame().ip += offset as usize;
                 }
                 Loop => {
                     let offset = self.read_u16();
-                    self.ip -= offset as usize;
+                    self.current_frame().ip -= offset as usize;
                 }
             }
         }
     }
 
     fn runtime_error(&self, message: &str) -> Result<(), VmError> {
+        let current_frame = &self.frames[self.frame_count - 1];
         eprintln!(
             "[line {}] Error in script: {message}",
-            self.chunk.line_at(self.ip)
+            current_frame.function.chunk.line_at(current_frame.ip)
         );
         Err(VmError::RuntimeError)
     }
 
+    #[inline(always)]
+    fn current_frame(&mut self) -> &mut CallFrame {
+        &mut self.frames[self.frame_count - 1]
+    }
+
     fn read_byte(&mut self) -> u8 {
-        let byte = self.chunk.code[self.ip];
-        self.ip += 1;
+        let frame = self.current_frame();
+        let byte = frame.function.chunk.code[frame.ip];
+        frame.ip += 1;
         byte
     }
 
     fn read_multi<const LEN: usize>(&mut self) -> &[u8] {
-        let data = &self.chunk.code[self.ip..self.ip + LEN];
-        self.ip += LEN;
+        let frame = self.current_frame();
+        let data = &frame.function.chunk.code[frame.ip..frame.ip + LEN];
+        frame.ip += LEN;
         data
     }
 
     fn read_constant(&mut self) -> Value {
         let index = self.read_byte();
-        self.chunk.constants[index as usize].clone()
+        self.current_frame().function.chunk.constants[index as usize].clone()
     }
 
     fn read_long_constant(&mut self) -> Value {
@@ -186,7 +220,7 @@ impl Vm {
         index_data[0..3].copy_from_slice(data);
 
         let index = u32::from_le_bytes(index_data);
-        self.chunk.constants[index as usize].clone()
+        self.current_frame().function.chunk.constants[index as usize].clone()
     }
 
     fn read_string(&mut self) -> Rc<str> {
@@ -239,7 +273,9 @@ pub enum VmError {
 #[cfg(test)]
 mod tests {
     use super::Vm;
-    use crate::{chunk::Chunk, op_code::OpCode, value::Value, vm::InterpretResult};
+    use crate::{
+        chunk::Chunk, object::FunctionObject, op_code::OpCode, value::Value, vm::InterpretResult,
+    };
 
     #[test]
     fn basic_math() {
@@ -264,7 +300,13 @@ mod tests {
         chunk.write(OpCode::Negate, 123);
         chunk.write(OpCode::Return, 123);
 
-        let result = Vm::new().interpret_chunk(chunk);
+        let function = FunctionObject {
+            arity: 0,
+            chunk,
+            name: "<main>".into(),
+        };
+
+        let result = Vm::new().interpret(function);
         assert_eq!(
             InterpretResult::Ok(Some(Value::Number(-0.821_428_571_428_571_4))),
             result
@@ -286,7 +328,13 @@ mod tests {
         chunk.write(OpCode::Add, 123);
         chunk.write(OpCode::Return, 123);
 
-        let result = Vm::new().interpret_chunk(chunk);
+        let function = FunctionObject {
+            arity: 0,
+            chunk,
+            name: "<main>".into(),
+        };
+
+        let result = Vm::new().interpret(function);
         assert_eq!(InterpretResult::Ok(Some(Value::Number(45.0))), result);
     }
 }

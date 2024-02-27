@@ -1,6 +1,6 @@
 use crate::value::Value;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Chunk {
     pub code: Vec<u8>,
     // Simple run-length encoding
@@ -8,7 +8,7 @@ pub struct Chunk {
     pub constants: Vec<Value>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, Clone)]
 struct LineInfo {
     start_offset: usize,
     line: u32,

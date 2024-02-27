@@ -1,12 +1,13 @@
 use crate::{
     chunk::Chunk,
+    object::FunctionObject,
     op_code::OpCode,
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
 use std::ops::Range;
 
-pub fn compile(source: &str) -> Option<Chunk> {
+pub fn compile(source: &str) -> Option<FunctionObject> {
     let scanner = Scanner::new(source);
 
     let parser = Parser {
@@ -17,10 +18,19 @@ pub fn compile(source: &str) -> Option<Chunk> {
         panic_mode: false,
     };
 
+    let local = Local {
+        name: None,
+        depth: 0,
+    };
     let mut compiler = Compiler {
-        compiling_chunk: Chunk::default(),
+        current_function: FunctionObject {
+            arity: 0,
+            chunk: Chunk::default(),
+            name: "<main>".into(),
+        },
+        function_type: FunctionType::Script,
         parser,
-        locals: Vec::new(),
+        locals: vec![local],
         scope_depth: 0,
     };
 
@@ -38,20 +48,27 @@ pub fn compile(source: &str) -> Option<Chunk> {
 }
 
 struct Compiler<'src> {
-    compiling_chunk: Chunk,
+    current_function: FunctionObject,
+    function_type: FunctionType,
     parser: Parser<'src>,
     locals: Vec<Local>,
     scope_depth: i32,
 }
 
+#[derive(Debug)]
 struct Local {
-    name: Token,
+    name: Option<Token>,
     depth: i32,
+}
+
+enum FunctionType {
+    Function,
+    Script,
 }
 
 impl<'src> Compiler<'src> {
     fn current_chunk(&mut self) -> &mut Chunk {
-        &mut self.compiling_chunk
+        &mut self.current_function.chunk
     }
 
     fn emit_byte(&mut self, byte: impl Into<u8>) {
@@ -91,16 +108,18 @@ impl<'src> Compiler<'src> {
         }
     }
 
-    fn end(mut self) -> Option<Chunk> {
+    fn end(mut self) -> Option<FunctionObject> {
         self.emit_return();
 
         if self.parser.had_error {
             None
         } else {
             #[cfg(feature = "print")]
-            self.compiling_chunk.disassemble("code");
+            self.current_function
+                .chunk
+                .disassemble(&self.current_function.name);
 
-            Some(self.compiling_chunk)
+            Some(self.current_function)
         }
     }
 
@@ -172,9 +191,11 @@ impl<'src> Compiler<'src> {
                     break;
                 }
 
-                if self.identifiers_eq(name, local.name) {
-                    self.parser
-                        .error("Variable with this name already exists in the current scope");
+                if let Some(local_name) = local.name {
+                    if self.identifiers_eq(name, local_name) {
+                        self.parser
+                            .error("Variable with this name already exists in the current scope");
+                    }
                 }
             }
 
@@ -187,7 +208,10 @@ impl<'src> Compiler<'src> {
     }
 
     fn add_local(&mut self, name: Token) {
-        let local = Local { name, depth: -1 };
+        let local = Local {
+            name: Some(name),
+            depth: -1,
+        };
         self.locals.push(local);
     }
 
@@ -450,7 +474,11 @@ impl<'src> Compiler<'src> {
             .iter()
             .enumerate()
             .rev()
-            .find(|(_, local)| self.identifiers_eq(name, local.name))
+            .find(|(_, local)| {
+                local
+                    .name
+                    .is_some_and(|local_name| self.identifiers_eq(name, local_name))
+            })
             .map(|(i, local)| {
                 if local.depth == -1 {
                     self.parser
