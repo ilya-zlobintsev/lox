@@ -1,0 +1,6 @@
+fun doStuff(a) {
+  var b = 10;
+  return a + b;
+}
+
+print doStuff(5);

@@ -1,16 +1,16 @@
 use crate::{
     chunk::Chunk,
-    object::FunctionObject,
+    object::{FunctionObject, Object},
     op_code::OpCode,
     scanner::{Scanner, Token, TokenType},
     value::Value,
 };
-use std::ops::Range;
+use std::{ops::Range, rc::Rc};
 
 pub fn compile(source: &str) -> Option<FunctionObject> {
     let scanner = Scanner::new(source);
 
-    let parser = Parser {
+    let mut parser = Parser {
         scanner,
         current: None,
         previous: None,
@@ -18,21 +18,7 @@ pub fn compile(source: &str) -> Option<FunctionObject> {
         panic_mode: false,
     };
 
-    let local = Local {
-        name: None,
-        depth: 0,
-    };
-    let mut compiler = Compiler {
-        current_function: FunctionObject {
-            arity: 0,
-            chunk: Chunk::default(),
-            name: "<main>".into(),
-        },
-        function_type: FunctionType::Script,
-        parser,
-        locals: vec![local],
-        scope_depth: 0,
-    };
+    let mut compiler = Compiler::new(&mut parser, FunctionType::Script);
 
     compiler.parser.advance();
 
@@ -47,10 +33,10 @@ pub fn compile(source: &str) -> Option<FunctionObject> {
     compiler.end()
 }
 
-struct Compiler<'src> {
+struct Compiler<'a, 'src> {
     current_function: FunctionObject,
     function_type: FunctionType,
-    parser: Parser<'src>,
+    parser: &'a mut Parser<'src>,
     locals: Vec<Local>,
     scope_depth: i32,
 }
@@ -66,7 +52,35 @@ enum FunctionType {
     Script,
 }
 
-impl<'src> Compiler<'src> {
+impl<'a, 'src> Compiler<'a, 'src> {
+    fn new(parser: &'a mut Parser<'src>, function_type: FunctionType) -> Self {
+        let name: Rc<str> = match function_type {
+            FunctionType::Function => {
+                let previous = parser
+                    .previous
+                    .expect("Compiling a function with no previous token");
+                parser.scanner.source[previous.start..previous.end].into()
+            }
+            FunctionType::Script => "<main>".into(),
+        };
+
+        let local = Local {
+            name: None,
+            depth: 0,
+        };
+        Compiler {
+            current_function: FunctionObject {
+                arity: 0,
+                chunk: Chunk::default(),
+                name,
+            },
+            function_type,
+            parser,
+            locals: vec![local],
+            scope_depth: 0,
+        }
+    }
+
     fn current_chunk(&mut self) -> &mut Chunk {
         &mut self.current_function.chunk
     }
@@ -83,6 +97,7 @@ impl<'src> Compiler<'src> {
     }
 
     fn emit_return(&mut self) {
+        self.emit_byte(OpCode::Nil);
         self.emit_byte(OpCode::Return.as_byte());
     }
 
@@ -143,7 +158,9 @@ impl<'src> Compiler<'src> {
     }
 
     fn declaration(&mut self) {
-        if self.match_token(TokenType::Var) {
+        if self.match_token(TokenType::Fun) {
+            self.fun_declaration();
+        } else if self.match_token(TokenType::Var) {
             self.var_declaration();
         } else {
             self.statement();
@@ -170,6 +187,58 @@ impl<'src> Compiler<'src> {
         self.define_variable(global);
     }
 
+    fn fun_declaration(&mut self) {
+        let global = self.parse_variable("Expected a function name");
+        self.mark_initialized();
+        self.function(FunctionType::Function);
+        self.define_variable(global);
+    }
+
+    fn function(&mut self, function_type: FunctionType) {
+        let mut compiler = Compiler::new(self.parser, function_type);
+        compiler.begin_scope();
+
+        compiler
+            .parser
+            .consume(TokenType::LeftParen, "Expected a '(' after function name");
+
+        if !compiler.check_current_token(TokenType::RightParen) {
+            loop {
+                if compiler.current_function.arity == u8::MAX {
+                    compiler
+                        .parser
+                        .error_at_current("Can't have more than 255 function parameters");
+                }
+                compiler.current_function.arity += 1;
+
+                let constant = compiler.parse_variable("Expected a parameter name");
+                compiler.define_variable(constant);
+
+                if !compiler.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        compiler
+            .parser
+            .consume(TokenType::RightParen, "Expected a ')' after parameters");
+        compiler
+            .parser
+            .consume(TokenType::LeftBrace, "Expected a '{' before function body");
+
+        compiler.block();
+
+        match compiler.end() {
+            Some(function) => {
+                let value = Value::Object(Object::Function(function));
+                let constant = self.make_constant(value);
+                self.emit_bytes(OpCode::Constant, constant);
+            }
+            None => eprintln!("Could not compile function"),
+        }
+    }
+
     fn define_variable(&mut self, var_index: u8) {
         if self.scope_depth == 0 {
             self.emit_bytes(OpCode::DefineGlobal, var_index);
@@ -179,7 +248,9 @@ impl<'src> Compiler<'src> {
     }
 
     fn mark_initialized(&mut self) {
-        self.locals.last_mut().unwrap().depth = self.scope_depth;
+        if self.scope_depth != 0 {
+            self.locals.last_mut().unwrap().depth = self.scope_depth;
+        }
     }
 
     fn declare_variable(&mut self) {
@@ -236,6 +307,8 @@ impl<'src> Compiler<'src> {
             self.print_statement();
         } else if self.match_token(TokenType::If) {
             self.if_statement();
+        } else if self.match_token(TokenType::Return) {
+            self.return_statement();
         } else if self.match_token(TokenType::While) {
             self.while_statement();
         } else if self.match_token(TokenType::For) {
@@ -331,13 +404,28 @@ impl<'src> Compiler<'src> {
         self.statement();
 
         let else_jump = self.emit_jump(OpCode::Jump);
-        self.emit_byte(OpCode::Pop);
         self.patch_jump(then_jump);
+        self.emit_byte(OpCode::Pop);
 
         if self.match_token(TokenType::Else) {
             self.statement();
         }
         self.patch_jump(else_jump);
+    }
+
+    fn return_statement(&mut self) {
+        if let FunctionType::Script = self.function_type {
+            self.parser.error("Cannot return from top-level code");
+        }
+
+        if self.match_token(TokenType::Semicolon) {
+            self.emit_return();
+        } else {
+            self.expression();
+            self.parser
+                .consume(TokenType::Semicolon, "Expected a ';' after return value");
+            self.emit_byte(OpCode::Return);
+        }
     }
 
     fn patch_jump(&mut self, offset: usize) {
@@ -523,6 +611,34 @@ impl<'src> Compiler<'src> {
         self.patch_jump(end_jump);
     }
 
+    fn call(&mut self, _can_assign: bool) {
+        let arg_count = self.argument_list();
+        self.emit_bytes(OpCode::Call, arg_count);
+    }
+
+    fn argument_list(&mut self) -> u8 {
+        let mut arg_count = 0;
+        if !self.check_current_token(TokenType::RightParen) {
+            loop {
+                self.expression();
+
+                if arg_count == u8::MAX {
+                    self.parser.error("Can't have more than 255 arguments");
+                }
+                arg_count += 1;
+
+                if !self.match_token(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.parser.consume(
+            TokenType::RightParen,
+            "Expected a ')' after function arguments",
+        );
+        arg_count
+    }
+
     fn parse_presedence(&mut self, precedence: Precedence) {
         self.parser.advance();
         let prefix_rule = self.get_rule(self.previous_token_type());
@@ -546,10 +662,10 @@ impl<'src> Compiler<'src> {
         }
     }
 
-    fn get_rule<'comp>(&'comp mut self, token_type: TokenType) -> ParseRule<'src, 'comp> {
+    fn get_rule<'comp>(&'comp mut self, token_type: TokenType) -> ParseRule<'src, 'a, 'comp> {
         use TokenType::*;
         match token_type {
-            LeftParen => ParseRule::new(Some(Self::grouping), None, Precedence::None),
+            LeftParen => ParseRule::new(Some(Self::grouping), Some(Self::call), Precedence::Call),
             Minus => ParseRule::new(Some(Self::unary), Some(Self::binary), Precedence::Term),
             Plus => ParseRule::new(None, Some(Self::binary), Precedence::Term),
             Slash => ParseRule::new(None, Some(Self::binary), Precedence::Factor),
@@ -604,18 +720,18 @@ impl<'src> Compiler<'src> {
     }
 }
 
-type ParseFn<'comp, 'src> = fn(&'comp mut Compiler<'src>, bool);
+type ParseFn<'comp, 'parser, 'src> = fn(&'comp mut Compiler<'parser, 'src>, bool);
 
-struct ParseRule<'src, 'comp> {
-    prefix: Option<ParseFn<'comp, 'src>>,
-    infix: Option<ParseFn<'comp, 'src>>,
+struct ParseRule<'src, 'parser, 'comp> {
+    prefix: Option<ParseFn<'comp, 'parser, 'src>>,
+    infix: Option<ParseFn<'comp, 'parser, 'src>>,
     precedence: Precedence,
 }
 
-impl<'src, 'comp> ParseRule<'src, 'comp> {
+impl<'src, 'parser, 'comp> ParseRule<'src, 'parser, 'comp> {
     fn new(
-        prefix: Option<ParseFn<'comp, 'src>>,
-        infix: Option<ParseFn<'comp, 'src>>,
+        prefix: Option<ParseFn<'comp, 'parser, 'src>>,
+        infix: Option<ParseFn<'comp, 'parser, 'src>>,
         precedence: Precedence,
     ) -> Self {
         Self {

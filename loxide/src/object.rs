@@ -1,10 +1,11 @@
-use crate::chunk::Chunk;
+use crate::{chunk::Chunk, value::Value};
 use std::{fmt, rc::Rc};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum Object {
     String(Rc<str>),
     Function(FunctionObject),
+    NativeFunction(fn(&[Value]) -> Value),
 }
 
 #[derive(PartialEq, Clone)]
@@ -42,5 +43,15 @@ impl_enum_conversions! {
 impl From<&str> for Object {
     fn from(value: &str) -> Self {
         Object::String(value.into())
+    }
+}
+
+impl fmt::Display for Object {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Object::String(s) => s.fmt(f),
+            Object::Function(funct) => write!(f, "<fun {}>", funct.name),
+            Object::NativeFunction(_) => write!(f, "<native fun>"),
+        }
     }
 }

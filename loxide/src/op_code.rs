@@ -25,4 +25,5 @@ convertable_enum! {
     JumpIfFalse = 22,
     Jump = 23,
     Loop = 24,
+    Call = 25,
 }

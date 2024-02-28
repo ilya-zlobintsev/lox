@@ -1,6 +1,6 @@
 use crate::value::Value;
 
-#[derive(Default, Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Chunk {
     pub code: Vec<u8>,
     // Simple run-length encoding
@@ -78,11 +78,11 @@ impl Chunk {
                 let index = u32::from_le_bytes(index_data);
                 let value = &self.constants[index as usize];
 
-                println!("{name:<16} {index} '{value:?}'");
+                println!("{name:<16} {index} '{value}'");
 
                 offset += 3;
             }
-            Constant | DefineGlobal | SetGlobal | GetGlobal => {
+            Constant | DefineGlobal | SetGlobal | GetGlobal | Call => {
                 let this = &self;
                 let name: &str = &name;
                 let offset: &mut usize = &mut offset;
@@ -90,7 +90,7 @@ impl Chunk {
 
                 let index = this.code[*offset];
                 let value = &this.constants[index as usize];
-                println!("{name:<16} {index} '{value:?}'");
+                println!("{name:<16} {index} '{value}'");
             }
             GetLocal | SetLocal => {
                 offset += 1;

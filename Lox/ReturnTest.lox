@@ -1,0 +1,11 @@
+var a = 1;
+var b = 2;
+
+fun stuff(c, d) {
+  return 5;
+}
+
+var e = stuff(3, 4);
+print a;
+print b;
+print e;

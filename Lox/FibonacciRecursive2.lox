@@ -4,6 +4,7 @@ fun fib(n) {
 }
 
 var before = clock();
-print fib(30);
+print fib(35);
 var after = clock();
+print "Execution took:";
 print after - before;

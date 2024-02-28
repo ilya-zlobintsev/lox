@@ -1,3 +1,5 @@
+mod native;
+
 use crate::{
     object::{FunctionObject, Object},
     op_code::OpCode,
@@ -18,22 +20,33 @@ pub struct Vm {
     globals: HashMap<Rc<str>, Value>,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct CallFrame {
     function: FunctionObject,
     ip: usize,
-    // slots: Vec<Value>,
     stack_offset: usize,
+}
+
+impl CallFrame {
+    fn new(function: FunctionObject, stack_offset: usize) -> Self {
+        Self {
+            function,
+            ip: 0,
+            stack_offset,
+        }
+    }
 }
 
 impl Vm {
     pub fn new() -> Self {
-        Self {
+        let mut vm = Self {
             stack: Vec::with_capacity(INITIAL_STACK_SIZE),
             globals: HashMap::new(),
             frames: std::array::from_fn(|_| CallFrame::default()),
             frame_count: 0,
-        }
+        };
+        vm.define_native_fn("clock".into(), native::clock);
+        vm
     }
 
     pub fn interpret(&mut self, function: FunctionObject) -> InterpretResult {
@@ -42,14 +55,7 @@ impl Vm {
 
         self.stack
             .push(Value::Object(Object::Function(function.clone())));
-
-        let frame = CallFrame {
-            function,
-            ip: 0,
-            stack_offset: 0,
-        };
-        self.frames[self.frame_count] = frame;
-        self.frame_count += 1;
+        self.call(function, 0)?;
 
         self.run()
     }
@@ -60,7 +66,7 @@ impl Vm {
             {
                 print!("          ");
                 for slot in 0..self.stack.len() {
-                    print!("[ {:?} ]", self.stack[slot]);
+                    print!("[ {} ]", self.stack[slot]);
                 }
                 println!();
 
@@ -77,7 +83,19 @@ impl Vm {
             use OpCode::*;
             match op_code {
                 Return => {
-                    break InterpretResult::Ok(self.stack.pop());
+                    let result = self.stack.pop().unwrap();
+
+                    let old_stack_offset = self.current_frame().stack_offset;
+
+                    self.frame_count -= 1;
+
+                    if self.frame_count == 0 {
+                        let return_value = self.stack.pop();
+                        break InterpretResult::Ok(return_value);
+                    }
+
+                    self.stack.drain(old_stack_offset..);
+                    self.stack.push(result);
                 }
                 Constant => {
                     let value = self.read_constant();
@@ -123,7 +141,7 @@ impl Vm {
                 }
                 Print => {
                     let value = self.stack.pop().unwrap();
-                    println!("{value:?}");
+                    println!("{value}");
                 }
                 Pop => {
                     self.stack.pop();
@@ -177,17 +195,31 @@ impl Vm {
                     let offset = self.read_u16();
                     self.current_frame().ip -= offset as usize;
                 }
+                Call => {
+                    let arg_count = self.read_byte();
+                    self.call_value(self.peek(arg_count as usize).clone(), arg_count)?;
+                }
             }
         }
     }
 
     fn runtime_error(&self, message: &str) -> Result<(), VmError> {
-        let current_frame = &self.frames[self.frame_count - 1];
-        eprintln!(
-            "[line {}] Error in script: {message}",
-            current_frame.function.chunk.line_at(current_frame.ip)
-        );
+        for i in (0..self.frame_count).rev() {
+            let frame = &self.frames[i];
+            let funct = &frame.function;
+            eprintln!(
+                "[line {}] in {}: {message}",
+                frame.function.chunk.line_at(frame.ip),
+                funct.name,
+            );
+        }
+
         Err(VmError::RuntimeError)
+    }
+
+    fn define_native_fn(&mut self, name: Rc<str>, funct: fn(&[Value]) -> Value) {
+        self.globals
+            .insert(name, Value::Object(Object::NativeFunction(funct)));
     }
 
     #[inline(always)]
@@ -243,13 +275,13 @@ impl Vm {
         let b = self.stack.pop().unwrap();
         let a = self.stack.pop().unwrap();
 
-        match (a, b) {
+        match (&a, &b) {
             (Value::Number(lhs), Value::Number(rhs)) => {
-                let result = op(lhs, rhs);
+                let result = op(*lhs, *rhs);
                 self.stack.push(result.into());
                 Ok(())
             }
-            _ => self.runtime_error("Operands have invalid types"),
+            _ => self.runtime_error(&format!("Operands have invalid types (got {a} and {b})")),
         }
     }
 
@@ -260,6 +292,43 @@ impl Vm {
     fn peek_mut(&mut self, distance: usize) -> &mut Value {
         let index = self.stack.len() - 1 - distance;
         &mut self.stack[index]
+    }
+
+    fn call_value(&mut self, callee: Value, arg_count: u8) -> Result<(), VmError> {
+        match callee {
+            Value::Object(Object::Function(funct)) => self.call(funct, arg_count),
+            Value::Object(Object::NativeFunction(f)) => {
+                let args: Vec<Value> = self
+                    .stack
+                    .drain(self.stack.len() - 1 - arg_count as usize..)
+                    .collect();
+                let result = f(&args);
+                self.stack.push(result);
+                Ok(())
+            }
+            _ => {
+                self.runtime_error("Only functions and classes are callable")?;
+                Ok(())
+            }
+        }
+    }
+
+    fn call(&mut self, funct: FunctionObject, arg_count: u8) -> Result<(), VmError> {
+        if arg_count != funct.arity {
+            self.runtime_error(&format!(
+                "Expected {} arugments, got {}",
+                funct.arity, arg_count
+            ))?;
+        }
+
+        if self.frame_count == FRAMES_MAX {
+            self.runtime_error("Stack overflow")?;
+        }
+
+        let frame = CallFrame::new(funct, self.stack.len() - arg_count as usize - 1);
+        self.frames[self.frame_count] = frame;
+        self.frame_count += 1;
+        Ok(())
     }
 }
 

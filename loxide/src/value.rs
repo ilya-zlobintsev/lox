@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    fmt::{self},
+    rc::Rc,
+};
 
 use crate::object::Object;
 
@@ -58,6 +61,17 @@ impl Value {
 
     pub fn new_string(value: impl Into<Rc<str>>) -> Self {
         Self::Object(Object::String(value.into()))
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Number(num) => num.fmt(f),
+            Boolean(bool) => bool.fmt(f),
+            Object(obj) => obj.fmt(f),
+            Nil => f.write_str("nil"),
+        }
     }
 }
 
