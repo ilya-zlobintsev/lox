@@ -90,8 +90,7 @@ impl Vm {
                     self.frame_count -= 1;
 
                     if self.frame_count == 0 {
-                        let return_value = self.stack.pop();
-                        break InterpretResult::Ok(return_value);
+                        break InterpretResult::Ok(Some(result));
                     }
 
                     self.stack.drain(old_stack_offset..);
